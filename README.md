@@ -4,12 +4,14 @@ Ground telegraphs for **Azeroth Survivors**: the areas your spells and their eff
 
 ## Install
 
-1. Download this repository (**Code → Download ZIP**) and unzip it.
-2. Put the folder in your game's `benilla-config\AddOns\` folder and name it exactly `AzerothSurvivorsTelegraphs`. The ZIP unpacks as `AzerothSurvivorsTelegraphs-main`, so rename it. You should end up with:
+1. Download **AzerothSurvivorsTelegraphs-*version*.zip** from the [latest release](https://github.com/zac-omar/AzerothSurvivorsTelegraphs/releases/latest).
+2. Unzip it into your game's `benilla-config\AddOns\` folder. It holds the `AzerothSurvivorsTelegraphs` folder, ready to go. You should end up with:
    ```
    <game folder>\benilla-config\AddOns\AzerothSurvivorsTelegraphs\AzerothSurvivorsTelegraphs.toc
    ```
 3. Start the game. If the addon isn't loaded, enable it on the AddOns screen at character select.
+
+To update, delete the old `AzerothSurvivorsTelegraphs` folder and unzip the new release in its place (your settings are kept). Using **Code → Download ZIP** instead? That unpacks as `AzerothSurvivorsTelegraphs-main`: rename the folder to `AzerothSurvivorsTelegraphs`.
 
 Click the **minimap button** or type **`/ast`** to open the options.
 
