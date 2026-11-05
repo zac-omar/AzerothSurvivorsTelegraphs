@@ -3067,7 +3067,7 @@ end
 -- good; what is replaced as it changes comes through State() and Stats().
 
 AST = {
-	registry = REGISTRY, modes = MODES, solid = SOLID, round = ROUND,
+	registry = REGISTRY, modes = MODES, solid = SOLID, round = ROUND, common = COMMON,
 	Settings = Settings, ResetSettings = ResetSettings, SetupClass = SetupClass,
 	info = info, preview = preview, fired = fired, shield = shield, meter = meter,
 };
@@ -3348,6 +3348,9 @@ SlashCmdList["ASTELEGRAPHS"] = function(msg)
 		Print(db.minimapHidden and "minimap button hidden (/ast minimap brings it back)." or "minimap button shown.");
 	elseif ( cmd == "events" ) then
 		PrintEvents();
+	elseif ( cmd == "share" or cmd == "import" or cmd == "export" ) then
+		-- /ast share: telegraph setups out and in, as a line of text
+		AST.OpenShare();
 	elseif ( cmd == "debug" ) then
 		PrintDebug();
 		PrintMeter();

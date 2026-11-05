@@ -173,7 +173,7 @@ A ground ring stays where its spell was put, even with the 8-piece bonus that ma
 
 Not shown: the T0.5 sets' 4-piece bonuses that change a size (Splitting Ice 7 yd, Conflagrate 8 yd, Tranquility 15 yd), since they have no hits of their own to tell them by, and the druid T0.5 Seed of Life.
 
-### All classes
+### Amulets (every class)
 
 | Telegraph | When it shows | Size |
 |---|---|---|
@@ -201,8 +201,8 @@ The addon follows the game's own language setting (**Options > Language** in the
 The options window has a tab for each page down its left side:
 
 - **General**: the minimap button, reading your talents from the meter, cone direction, and the commands.
-- **All classes**: the telegraphs any hero can use (amulets, co-op revives, the custom ring).
-- **One tab per class**, yours first and marked "you". You can set up another class's telegraphs before you play it.
+- **One tab per class**, yours first and marked "you". The window always opens on yours. You can set up another class's telegraphs before you play it.
+- **Amulets**, below the classes: the telegraphs any hero can use (amulets, co-op revives, the custom ring).
 
 A class page lists its telegraphs under **Spells**, **Talents**, **Amulets** and **Sets** (armor set bonuses), and the experimental ones (off by default) under **Experimental**. The dot beside each one turns it on or off, and its colour says where it stands:
 
@@ -223,6 +223,16 @@ Click a telegraph to see what it shows, its size right now, whether your hero ha
 
 If your frame rate drops, lower **Fill detail**, turn off **Glow**, or set **Most at once**.
 
+## Sharing setups
+
+Click **Import / Export** at the top of the options window, or type `/ast share`.
+
+- **Export every class**, or **Export** the page you're on (a class, or Amulets), puts your setup in the box as one line of text, already selected. Press **Ctrl+C** and share it.
+- To use someone else's line, paste it into the box with **Ctrl+V**. Before anything changes, the box says what the line holds (how many telegraphs, which classes). **Import** applies it.
+- A line changes only the telegraphs it holds, each set exactly as the person who exported it had it. So you can take one person's Paladin setup and someone else's Mage setup, or grab one line that sets every class at once.
+- A line from another version of the addon still imports. Telegraphs that version doesn't have are left out, and the box says how many.
+- Only the telegraphs' settings are shared: on or off, when they show, size, style and colours. Your window, minimap button and cone direction stay your own.
+
 ## Minimap button
 
 It starts in a free spot on the minimap's edge, clear of the other buttons there.
@@ -239,6 +249,7 @@ It starts in a free spot on the minimap's edge, clear of the other buttons there
 | `/ast` | Open or close the options |
 | `/ast ring <yards>` | Turn on the custom ring at that size (`/ast ring` alone toggles it) |
 | `/ast minimap` | Hide or show the minimap button |
+| `/ast share` | Open Import / Export, to share telegraph setups |
 | `/ast meter` | Show your talents as the damage meter lists them (`/ast meter off` / `on` stops or starts asking it) |
 | `/ast debug` | Show what the addon reads: your class, spells, sizes, cooldowns, problems |
 | `/ast events` | Show the last combat hit and the items and talents it detected |

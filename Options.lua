@@ -1,7 +1,7 @@
 -- The options window. Its pages are tabs down the left side: General (what isn't one
--- telegraph's), All classes (the telegraphs any hero can use) and one per class that has
--- telegraphs, yours first. A telegraph page lists its telegraphs by kind, with the chosen one's
--- settings beside the list. Core.lua hands over what the window needs as AST.
+-- telegraph's), one per class that has telegraphs, yours first, and Amulets (the telegraphs any
+-- hero can use). A telegraph page lists its telegraphs by kind, with the chosen one's settings
+-- beside the list. Core.lua hands over what the window needs as AST.
 
 local SOLID = AST.solid;
 local BACKDROP = {
@@ -525,7 +525,7 @@ local function BuildNav()
 	ui.nav:SetPoint("BOTTOMLEFT", win, "BOTTOMLEFT", 10, 10);
 	ui.tabs = {};
 	Tab("general", ICONS.general, "General");
-	Tab("common", ICONS.common, "All classes");
+	Tab("common", ICONS.common, "Amulets");
 	ui.classHead = Label(ui.nav, "Classes", "GameFontNormalSmall", true);
 	for class, r in pairs(AST.registry) do
 		if ( class ~= "common" ) then
@@ -557,11 +557,11 @@ local function BuildNav()
 			b.tag:SetText(b.page == myClass and L("you") or "");
 		end
 		v:SetText(version and string.format(L("Version %s"), version) or "");
+		-- General, the classes under their heading, then Amulets
 		local y = -6;
 		byPage.general:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y);
-		byPage.common:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 30);
-		ui.classHead:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 12, y - 70);
-		y = y - 86;
+		ui.classHead:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 12, y - 40);
+		y = y - 56;
 		local classes = ClassOrder();
 		for i = 1, table.getn(classes) do
 			local b = byPage[classes[i]];
@@ -569,6 +569,8 @@ local function BuildNav()
 			b:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y);
 			y = y - 30;
 		end
+		byPage.common:ClearAllPoints();
+		byPage.common:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 10);
 	end);
 end
 
@@ -1014,6 +1016,7 @@ local function BuildGeneral()
 	Text(g, "/ast ring 10", nil, function() return L("a 10 yd custom ring around you (/ast ring turns it on or off)"); end);
 	Text(g, "/ast debug", nil, function() return L("what the addon reads, for when a telegraph doesn't show"); end);
 	Text(g, "/ast meter", nil, function() return L("your talents as the meter lists them"); end);
+	Text(g, "/ast share", nil, function() return L("import or export telegraph setups"); end);
 	Layout(g);
 end
 
@@ -1040,6 +1043,9 @@ local function BuildHeader()
 		Refresh();
 	end);
 	hideAll:SetPoint("RIGHT", close, "LEFT", -6, 0);
+	-- telegraph setups out and in
+	local shareButton = Button(win, "Import / Export", 96, 22, function() AST.OpenShare(); end);
+	shareButton:SetPoint("RIGHT", hideAll, "LEFT", -6, 0);
 	local rule = Rule(win, 0.15);
 	rule:SetPoint("TOPLEFT", win, "TOPLEFT", 10, -46);
 	rule:SetPoint("TOPRIGHT", win, "TOPRIGHT", -10, -46);
@@ -1100,6 +1106,9 @@ local function Build()
 	if ( UISpecialFrames ) then
 		table.insert(UISpecialFrames, "ASTOptions");
 	end
+	win:SetScript("OnShow", function() AST.OptionsShown(true); end);
+	win:SetScript("OnHide", function() AST.OptionsShown(false); end);
+	AST.OnTop("ASTOptions", true);
 	BuildHeader();
 	BuildNav();
 	BuildList();
@@ -1155,7 +1164,7 @@ ShowPage = function(p)
 		local defs = PageDefs(p);
 		local c = p == "common" and { 1, 0.82, 0 } or ClassColor(p);
 		ui.pageIcon:SetTexture(p == "common" and ICONS.common or (r.icon or ICONS.class));
-		ui.pageTitle:SetText(p == "common" and L("All classes") or Title(p));
+		ui.pageTitle:SetText(p == "common" and L("Amulets") or Title(p));
 		ui.pageTitle:SetTextColor(c[1], c[2], c[3]);
 		local sub = r.blurb and L(r.blurb) or string.format(L("%d telegraphs."), table.getn(defs));
 		if ( p ~= "common" and p == myClass ) then
@@ -1191,14 +1200,164 @@ ShowPage = function(p)
 	end
 end
 
--- The page to open on: the last one shown, else your class's, else All classes.
+---------------------------------------------------------------------------------------------
+-- Import / Export: telegraph setups as a line of text (Share.lua)
+
+local share;            -- its window, made the first time it opens
+
+-- "Paladin 12, Amulets 4": the pages a line holds, how many telegraphs of each
+local function SharePages(res)
+	local list, out = AST.SharePages(res), {};
+	for i = 1, table.getn(list) do
+		local p = list[i][1];
+		table.insert(out, (p == "common" and L("Amulets") or Title(p)) .. " " .. list[i][2]);
+	end
+	return table.concat(out, ", ");
+end
+
+local function BuildShare()
+	share = CreateFrame("Frame", "ASTShare", UIParent);
+	share:SetWidth(540);
+	share:SetHeight(360);
+	share:SetFrameStrata("FULLSCREEN_DIALOG");
+	share:SetBackdrop(BACKDROP);
+	share:SetBackdropColor(0.05, 0.05, 0.07, 0.97);
+	share:SetBackdropBorderColor(0.5, 0.5, 0.6, 1);
+	share:SetPoint("CENTER", UIParent, "CENTER", 0, 40);
+	share:EnableMouse(true);
+	share:SetMovable(true);
+	share:RegisterForDrag("LeftButton");
+	share:SetScript("OnDragStart", function() share:StartMoving(); end);
+	share:SetScript("OnDragStop", function() share:StopMovingOrSizing(); end);
+	if ( UISpecialFrames ) then
+		table.insert(UISpecialFrames, "ASTShare");
+	end
+	AST.OnTop("ASTShare", true);
+	local title = Label(share, "Import / Export", "GameFontNormalLarge");
+	title:SetPoint("TOPLEFT", share, "TOPLEFT", 16, -14);
+	local close = Button(share, "x", 22, 22, function() share:Hide(); end);
+	close:SetPoint("TOPRIGHT", share, "TOPRIGHT", -10, -10);
+	local help = Label(share, "Export makes a line to share. To use someone else's, paste it in the box (Ctrl+V) and press Import: only the telegraphs it holds change, so lines can be mixed.");
+	help:SetTextColor(0.7, 0.7, 0.75);
+	help:SetPoint("TOPLEFT", share, "TOPLEFT", 16, -40);
+	help:SetPoint("RIGHT", share, "RIGHT", -16, 0);
+	help:SetJustifyH("LEFT");
+	help:SetJustifyV("TOP");
+	help:SetHeight(28);
+
+	-- the box, in a dark field that scrolls; a click anywhere in the field types in it
+	local field = Box(share);
+	field:SetPoint("TOPLEFT", share, "TOPLEFT", 14, -104);
+	field:SetPoint("BOTTOMRIGHT", share, "BOTTOMRIGHT", -14, 72);
+	local made, scroll = pcall(CreateFrame, "ScrollFrame", "ASTShareScroll", field, "UIPanelScrollFrameTemplate");
+	if ( not made ) then
+		scroll = CreateFrame("ScrollFrame", "ASTShareScroll", field);
+	end
+	scroll:SetPoint("TOPLEFT", field, "TOPLEFT", 8, -8);
+	scroll:SetPoint("BOTTOMRIGHT", field, "BOTTOMRIGHT", -28, 8);
+	local box = CreateFrame("EditBox", "ASTShareBox", scroll);
+	box:SetMultiLine(true);
+	box:SetAutoFocus(false);
+	box:SetMaxLetters(0);
+	box:SetFontObject(GameFontHighlightSmall);
+	box:SetWidth(470);
+	box:SetHeight(180);
+	box:SetScript("OnEscapePressed", function() box:ClearFocus(); end);
+	scroll:SetScrollChild(box);
+	field:EnableMouse(true);
+	field:SetScript("OnMouseDown", function() box:SetFocus(); end);
+
+	local status = Label(share, "");
+	status:SetPoint("BOTTOMLEFT", share, "BOTTOMLEFT", 16, 46);
+	status:SetPoint("RIGHT", share, "RIGHT", -16, 0);
+	status:SetJustifyH("LEFT");
+	local function Say(text, r, g, b)
+		status:SetText(text);
+		status:SetTextColor(r or 0.55, g or 0.8, b or 1);
+	end
+	-- what a line holds, or why it can't be used
+	local function Holds(res, done)
+		local left = res.unknown > 0 and (" " .. string.format(L("%d from another version of the addon are left out."), res.unknown)) or "";
+		if ( res.err == "cut" ) then
+			Say(L("This line is cut short: copy all of it again."), 1, 0.6, 0.2);
+		elseif ( res.err ) then
+			Say(L("Not a telegraph line: copy it again from its start (AST1:...)."), 1, 0.6, 0.2);
+		elseif ( done ) then
+			Say(string.format(L("Imported %d telegraphs (%s)."), res.count, SharePages(res)) .. left, 0.4, 1, 0.5);
+		else
+			Say(string.format(L("Holds %d telegraphs (%s). Import replaces their settings."), res.count, SharePages(res)) .. left);
+		end
+	end
+
+	local own;   -- the line just exported, which needs no reading back
+	local function Export(scope)
+		local line, n = AST.Export(scope);
+		own = line;
+		box:SetText(line);
+		box:HighlightText();
+		box:SetFocus();
+		Say(string.format(L("%d telegraphs (%s). Press Ctrl+C to copy it."), n, SharePages(AST.Import(line))));
+	end
+	box:SetScript("OnTextChanged", function()
+		if ( scroll.UpdateScrollChildRect ) then
+			scroll:UpdateScrollChildRect();
+		end
+		local text = box:GetText() or "";
+		if ( text == own ) then
+			return;
+		end
+		own = nil;
+		if ( string.gsub(text, "%s", "") == "" ) then
+			Say("");
+		else
+			Holds(AST.Import(text));
+		end
+	end);
+
+	local all = Button(share, "Export every class", 120, 22, function() Export("all"); end);
+	all:SetPoint("TOPLEFT", share, "TOPLEFT", 14, -72);
+	share.this = Button(share, "", 120, 22, function() Export(page); end);
+	share.this:SetPoint("LEFT", all, "RIGHT", 6, 0);
+	local import = Button(share, "Import", 90, 22, function()
+		local res = AST.Import(box:GetText(), true);
+		Holds(res, true);
+		if ( not res.err ) then
+			Refresh();
+		end
+	end);
+	import:SetPoint("BOTTOMLEFT", share, "BOTTOMLEFT", 14, 14);
+	local clear = Button(share, "Clear", 70, 22, function()
+		box:SetText("");
+		box:SetFocus();
+	end);
+	clear:SetPoint("LEFT", import, "RIGHT", 6, 0);
+end
+
+-- Opens Import / Export, its second export button for the page shown (none on General).
+function AST.OpenShare()
+	if ( not share ) then
+		BuildShare();
+	end
+	local b = share.this;
+	if ( page and page ~= "general" and AST.registry[page] ) then
+		b.text:SetText(string.format(L("Export %s"), page == "common" and L("Amulets") or Title(page)));
+		b:SetWidth(math.max(120, (b.text.GetStringWidth and b.text:GetStringWidth() or 0) + 16));
+		b:Show();
+	else
+		b:Hide();
+	end
+	share:Show();
+end
+
+-- The page to open on: your class's, else (your class not known yet) the last one shown, else
+-- Amulets.
 local function StartPage()
 	local db, _, myClass = AST.State();
 	local p = db.ui.page;
-	if ( p == "general" or ( p and AST.registry[p] ) ) then
-		return p;
-	elseif ( myClass and AST.registry[myClass] ) then
+	if ( myClass and AST.registry[myClass] ) then
 		return myClass;
+	elseif ( p == "general" or ( p and AST.registry[p] ) ) then
+		return p;
 	end
 	return "common";
 end
@@ -1211,12 +1370,14 @@ function AST.ToggleOptions()
 	if ( not win ) then
 		Build();
 		win:Show();
+		-- a new frame is shown from the start, so its OnShow didn't come
+		AST.OptionsShown(true);
 		ShowPage(StartPage());
 	elseif ( win:IsShown() ) then
 		win:Hide();
 	else
 		win:Show();
-		ShowPage(page or StartPage());
+		ShowPage(StartPage());
 	end
 end
 
@@ -1239,4 +1400,21 @@ function AST.ClassChanged(class)
 	if ( win:IsShown() ) then
 		ShowPage(db.ui.page or StartPage());
 	end
+end
+
+---------------------------------------------------------------------------------------------
+-- Over the game's own screens: the window and Import / Export are kept over the level-up and
+-- jewelry cards (AZS_SetOnTopOfScreens), so the telegraphs can be set up while choosing.
+
+-- Keeps the frame called `name` over the game's screens (or not), where the game can.
+function AST.OnTop(name, on)
+	if ( type(AZS_SetOnTopOfScreens) == "function" ) then
+		pcall(AZS_SetOnTopOfScreens, name, on);
+	end
+end
+
+-- While the window is open, the tooltip and the colour picker it uses are kept over them too.
+function AST.OptionsShown(shown)
+	AST.OnTop("GameTooltip", shown);
+	AST.OnTop("ColorPickerFrame", shown);
 end

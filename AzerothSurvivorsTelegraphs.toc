@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: Azeroth Survivors Telegraphs
 ## Notes: Ground telegraphs for each class's spells and area effects. Type /ast or click the minimap button for the options.
-## Version: 0.6
+## Version: 0.7
 ## SavedVariables: ASTelegraphsDB
 Locale.lua
 Locales\pl.lua
@@ -18,6 +18,7 @@ Locales\zh.lua
 Locales\ja.lua
 Locales\ko.lua
 Core.lua
+Share.lua
 Options.lua
 ClassCommon.lua
 ClassWarrior.lua
