@@ -117,14 +117,26 @@ local function Skipped(def)
 	return false;
 end
 
+-- The telegraph a free one goes with (Free Consecration: Consecration), while that one is off.
+local function MainOff(def)
+	local _, _, _, _, byId = AST.State();
+	local main = def.freeFall and byId and byId[def.freeFall];
+	return main and not AST.Settings(main).enabled and main or nil;
+end
+
 -- Whether your hero has what a telegraph on this page needs right now (its spell this run, the
 -- item or talent it comes of), and if not, why: its dot in the list is green or amber by it.
+-- Third: it waits on another telegraph being on, not on your hero.
 local function Readiness(def)
 	local _, _, myClass = AST.State();
 	if ( page ~= "common" and page ~= myClass ) then
 		return false, string.format(L("You're playing %s."), myClass and Title(myClass) or L("another class"));
 	elseif ( Skipped(def) ) then
 		return false, L("Priest Telegraphs draws it while it runs.");
+	end
+	local main = MainOff(def);
+	if ( main ) then
+		return false, string.format(L("Shows only while %s is on."), L(main.name)), true;
 	end
 	local i = AST.info[def.id] or {};
 	if ( def.match ) then
@@ -626,7 +638,7 @@ local function Entry()
 			return;
 		end
 		GameTooltip:SetOwner(e.dot, "ANCHOR_RIGHT");
-		local ready, why = Readiness(e.def);
+		local ready, why, onOther = Readiness(e.def);
 		if ( not AST.Settings(e.def).enabled ) then
 			GameTooltip:SetText(L("Off"), 1, 0.35, 0.35);
 			GameTooltip:AddLine(L("Click to turn it on."), 0.8, 0.8, 0.8);
@@ -636,7 +648,8 @@ local function Entry()
 		else
 			GameTooltip:SetText(L("On, waiting"), 1, 0.72, 0.2);
 			GameTooltip:AddLine(why, 1, 1, 1);
-			GameTooltip:AddLine(L("It shows once your hero has it. Click to turn it off."), 0.8, 0.8, 0.8);
+			GameTooltip:AddLine(onOther and L("Click to turn it off.")
+				or L("It shows once your hero has it. Click to turn it off."), 0.8, 0.8, 0.8);
 		end
 		GameTooltip:Show();
 	end);
@@ -760,7 +773,10 @@ local function StatusLines()
 		size = string.format(L("Size: %.1f yd radius (%s)"), i.size, from);
 	end
 	local source = "";
-	if ( d.spellKey and not d.match ) then
+	local main = MainOff(d);
+	if ( main ) then
+		source = string.format(L("Shows only while %s is on."), L(main.name));
+	elseif ( d.spellKey and not d.match ) then
 		if ( i.known ) then
 			source = string.format(L("In your spells: cooldown %.1f of %.1f sec"), i.left or 0, i.max or 0);
 		else

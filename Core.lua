@@ -2070,7 +2070,7 @@ end
 -- as its duration spans cooldowns). Once it has, every storm has its cast's spot, and a hit none
 -- takes is a stray. A spot of hits alone sits where they centre until it shows (a cast the list
 -- shows late takes it over first), then stays.
-local function SpotHit(def, x, y, now, R, dur, ev)
+local function SpotHit(def, x, y, now, R, dur, ev, freed)
 	local s, near, fresh, live, latest = nil, nil, nil, 0, nil;
 	local unit = ev and ( ev.targetUnitId or ev.targetId );
 	for i = 1, table.getn(spots) do
@@ -2088,6 +2088,16 @@ local function SpotHit(def, x, y, now, R, dur, ev)
 	end
 	-- (one set at your feet is where it is: a hit off it isn't its)
 	s = s or ( not def.atFeet and fresh ) or nil;
+	if ( s and near and def.freeFall ) then
+		-- a free one's: not a hit nearer one of its spell's own casts
+		for i = 1, table.getn(spots) do
+			local t = spots[i];
+			local dx, dy = x - t.x, y - t.y;
+			if ( t.id == def.freeFall and now - t.at < t.dur + 0.5 and dx * dx + dy * dy < near ) then
+				return;
+			end
+		end
+	end
 	if ( not s and spotCast[def.id] ) then
 		-- a stray: the first few of each storm go in the spot log
 		if ( latest ) then
@@ -2132,8 +2142,9 @@ local function SpotHit(def, x, y, now, R, dur, ev)
 		table.insert(spots, s);
 	elseif ( not s ) then
 		local c = SpellOf(def);
-		if ( def.atFeet or live >= ((c and c.max and c.max > 0) and math.ceil(dur / c.max) or 2) ) then
-			-- one set at your feet shows only with its cast: its hits alone don't say where you stood
+		if ( def.atFeet or freed or live >= ((c and c.max and c.max > 0) and math.ceil(dur / c.max) or 2) ) then
+			-- one set at your feet shows only with its cast: its hits alone don't say where you stood;
+			-- with a free one out, hits with no cast are the free one's
 			return;
 		end
 		s = { id = def.id, at = now, dur = dur, x = x, y = y, xs = {}, ys = {} };
@@ -2349,7 +2360,7 @@ local function PollEvents(now, p, active, onShield)
 							and ( not need or Afflicted(need, t, now, window) ) ) then
 							Fire(a.def, x, y, now, owned.caps[a.has] or a.def.cap);
 						elseif ( a.def.shape == "ground" and KilledBy(ev, a.def.on) ) then
-							SpotHit(a.def, x, y, now, a.size, a.dur, ev);
+							SpotHit(a.def, x, y, now, a.size, a.dur, ev, a.freed);
 						elseif ( a.def.trigger == "burst" and KilledBy(ev, a.def.on) ) then
 							local b = bursts[a.def.id] or { xs = {}, ys = {} };
 							bursts[a.def.id] = b;
@@ -2733,7 +2744,10 @@ local function CollectJobs(now, inRun)
 			inf = {};
 			info[def.id] = inf;
 		end
-		if ( st.enabled or test ) then
+		-- a free one (Free Consecration) goes with its spell's own telegraph: only while that is on,
+		-- as its casts are what it is told apart from
+		local main = def.freeFall and byId[def.freeFall];
+		if ( ( st.enabled and not ( main and not Settings(main).enabled ) ) or test ) then
 			local job = { def = def, st = st, alpha = 1 };
 			local has, how;
 			if ( def.match ) then
@@ -2847,6 +2861,16 @@ local function CollectJobs(now, inRun)
 			end
 			if ( job.show ) then
 				table.insert(jobs, job);
+			end
+		end
+	end
+	-- a spell whose free one is out: its hits with no cast start no spot of its own, as the free
+	-- one places those (Rain of Fire's, with Rain of Chaos)
+	for i = 1, table.getn(active) do
+		local main = active[i].def.freeFall;
+		for k = 1, ( main and table.getn(active) or 0 ) do
+			if ( active[k].def.id == main ) then
+				active[k].freed = true;
 			end
 		end
 	end

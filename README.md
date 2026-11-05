@@ -157,7 +157,7 @@ Spells that cover a spot of the ground for a while get a ring there that fills i
 
 - **Set at your feet when you cast it** (Consecration, Immolation Trap, Frost Trap, Magma Totem): the ring goes where you stood when your spell bar showed the cast (Magma Totem 1.5 yd ahead of you, where the totem stands), and stays there. These are on by default.
 - **Lands on a group** *(experimental)* (Blizzard, Flamestrike, Volley, Rain of Fire, Hurricane): it lands on the thickest group of enemies in reach. Of the 24 enemies nearest you within its range, that's the one with the most enemies around it. The ring appears as soon as your spell bar shows the cast, placed from where the enemies stood when the spell went off, and it stays there. Which enemy wins depends on the spell's exact size, and the tooltip rounds it (to the yard from 10 yd up). So the addon works it out from which enemies each one hits and which it just misses, and uses that for the casts after. The first cast or two of a run, or after the spell gets bigger, can land a little off.
-- **Free ones** *(experimental)* (Rain of Chaos, Hallowed Ground's Consecration, Wyvern Sting's and Counterattack's traps): your spell bar doesn't show these, so each is placed by its first tick, a quarter second after it went down.
+- **Free ones** *(experimental)* (Rain of Chaos, Hallowed Ground's Consecration, Wyvern Sting's and Counterattack's traps): your spell bar doesn't show these, so each is placed by its first tick, a quarter second after it went down. Your own casts of the same spell hit exactly like the free ones, so a free one shows only while its spell's own telegraph (Rain of Fire, Consecration, Immolation Trap) is on too: that's how it tells your casts' ticks from the free ones'.
 
 Every ring lasts exactly as long as its spell: the tooltip's duration, made exact (the tooltip rounds to the second from 10 sec up), with every bonus, plus the moment the last tick still lands. If a tick ever lands later, the ring runs on with it.
 
@@ -203,7 +203,7 @@ The options window has a tab for each page down its left side:
 A class page lists its telegraphs under **Spells**, **Talents**, **Amulets** and **Sets** (armor set bonuses), and the experimental ones (off by default) under **Experimental**. The dot beside each one turns it on or off, and its colour says where it stands:
 
 - **Green**: on, and your hero has it now (the spell this run, the talent, the amulet or the set).
-- **Amber**: on, but waiting: your hero doesn't have it right now, so it isn't drawn. Point at the dot to see what it needs.
+- **Amber**: on, but waiting: your hero doesn't have it right now, or (a free one) its spell's own telegraph is off, so it isn't drawn. Point at the dot to see what it needs.
 - **Red**: off.
 
 Click a telegraph to see what it shows, its size right now, whether your hero has it, and its settings:
