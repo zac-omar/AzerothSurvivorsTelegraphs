@@ -115,8 +115,8 @@ local COMMON = {
 	most = 0,                                                              -- enemy effects: 0 = no cap
 };
 
-local TEX = "Interface\\AddOns\\AzerothSurvivorsTelegraphs\\Textures\\";
-local SOLID, ROUND = TEX .. "solid", TEX .. "dot";
+-- The two kinds of piece every shape is made of, white, tinted to its colours (SetPiece).
+local SOLID, ROUND = "solid", "round";
 local MAX_QUADS = 4000;
 local MAX_FILL_DOTS = 600;
 local MAX_STRIPS = 400;
@@ -219,6 +219,18 @@ canvas:SetFrameStrata("BACKGROUND");
 local pool, used, shown = {}, 0, 0;
 local screenW, screenH = 1024, 768;
 
+-- Texture `t` as a piece of `kind` (SOLID or ROUND): the game's own round mask, whole for a dot,
+-- its centre (all one white) for a solid piece. The game's own, not a file of the addon's, so it
+-- loads wherever the game runs: its browser version loads no texture files of an addon's.
+local function SetPiece(t, kind)
+	t:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask");
+	if ( kind == ROUND ) then
+		t:SetTexCoord(0, 1, 0, 1);
+	else
+		t:SetTexCoord(0.3, 0.7, 0.3, 0.7);
+	end
+end
+
 local function Quad(tex, x, y, w, h, c, alpha)
 	if ( used >= MAX_QUADS or x > screenW + PAD or y > screenH + PAD or x + w < -PAD or y + h < -PAD ) then
 		return;
@@ -230,7 +242,7 @@ local function Quad(tex, x, y, w, h, c, alpha)
 		pool[used] = t;
 	end
 	if ( t.tex ~= tex ) then
-		t:SetTexture(tex);
+		SetPiece(t, tex);
 		t.tex = tex;
 	end
 	local a = c[4] * alpha;
@@ -3067,7 +3079,7 @@ end
 -- good; what is replaced as it changes comes through State() and Stats().
 
 AST = {
-	registry = REGISTRY, modes = MODES, solid = SOLID, round = ROUND, common = COMMON,
+	registry = REGISTRY, modes = MODES, solid = SOLID, round = ROUND, common = COMMON, SetPiece = SetPiece,
 	Settings = Settings, ResetSettings = ResetSettings, SetupClass = SetupClass,
 	info = info, preview = preview, fired = fired, shield = shield, meter = meter,
 };

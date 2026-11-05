@@ -175,7 +175,7 @@ end
 -- A thin line, under headings and between the window's parts.
 local function Rule(parent, alpha)
 	local t = parent:CreateTexture(nil, "ARTWORK");
-	t:SetTexture(SOLID);
+	AST.SetPiece(t, SOLID);
 	t:SetVertexColor(1, 1, 1, alpha or 0.12);
 	t:SetHeight(1);
 	return t;
@@ -305,7 +305,7 @@ local function Check(panel, label, when, get, set, hint)
 		text:SetPoint("LEFT", b, "RIGHT", 8, 0);
 	end
 	local mark = b:CreateTexture(nil, "OVERLAY");
-	mark:SetTexture(SOLID);
+	AST.SetPiece(mark, SOLID);
 	mark:SetVertexColor(0.75, 0.55, 1, 1);
 	mark:SetWidth(8);
 	mark:SetHeight(8);
@@ -395,7 +395,7 @@ end
 local function Color(panel, label, when, key)
 	local row = Row(panel, label, when);
 	local swatch = row:CreateTexture(nil, "OVERLAY");
-	swatch:SetTexture(SOLID);
+	AST.SetPiece(swatch, SOLID);
 	swatch:SetWidth(18);
 	swatch:SetHeight(18);
 	swatch:SetPoint("LEFT", row, "LEFT", CX, 0);
@@ -412,7 +412,7 @@ local function Color(panel, label, when, key)
 		b:SetHeight(14);
 		b:SetPoint("LEFT", row, "LEFT", x, 0);
 		local t = b:CreateTexture(nil, "OVERLAY");
-		t:SetTexture(SOLID);
+		AST.SetPiece(t, SOLID);
 		t:SetVertexColor(pc[1], pc[2], pc[3], 1);
 		t:SetAllPoints(b);
 		b:SetScript("OnClick", function() SetRGB(pc[1], pc[2], pc[3]); end);
@@ -481,7 +481,7 @@ local function Tab(id, icon, text)
 	b.tag:SetPoint("RIGHT", b, "RIGHT", -8, 0);
 	-- the chosen tab's mark, joining it to its page
 	b.bar = b:CreateTexture(nil, "OVERLAY");
-	b.bar:SetTexture(SOLID);
+	AST.SetPiece(b.bar, SOLID);
 	b.bar:SetVertexColor(0.75, 0.55, 1, 1);
 	b.bar:SetWidth(3);
 	b.bar:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -3);
@@ -606,7 +606,7 @@ local function Entry()
 	e:SetWidth(LIST_W - 16);
 	e:SetBackdrop(FLAT);
 	e.chip = e:CreateTexture(nil, "OVERLAY");
-	e.chip:SetTexture(SOLID);
+	AST.SetPiece(e.chip, SOLID);
 	e.chip:SetWidth(3);
 	e.chip:SetHeight(12);
 	e.chip:SetPoint("LEFT", e, "LEFT", 5, 0);
@@ -623,7 +623,7 @@ local function Entry()
 	e.dot:SetHeight(16);
 	e.dot:SetPoint("RIGHT", e, "RIGHT", -4, 0);
 	e.dot.mark = e.dot:CreateTexture(nil, "OVERLAY");
-	e.dot.mark:SetTexture(AST.round);
+	AST.SetPiece(e.dot.mark, AST.round);
 	e.dot.mark:SetWidth(9);
 	e.dot.mark:SetHeight(9);
 	e.dot.mark:SetPoint("CENTER", e.dot, "CENTER", 0, 0);
