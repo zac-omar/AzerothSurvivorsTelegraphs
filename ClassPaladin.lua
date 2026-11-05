@@ -97,9 +97,9 @@ AST_Register("paladin", {
 		id = "set_judgement", name = "Epic set: Judgement kills", shape = "enemy", trigger = "burst", atKill = true,
 		kind = "Sets", radius = 8,
 		desc = "With all 8 pieces of the Epic paladin armor set at 3 stars or more, enemies Judgement kills explode: where they do.",
-		on = { source = "^set:3%.paladin" },
+		on = { source = "^set:paladin%.3" }, by = { spells = { 20271 } },
 		match = { "set/epic/paladin/5", "set/epic/paladin" }, talentKeys = { "set/epic/paladin/5", "set/epic/paladin" }, showsItself = true,
-		needName = "the Epic paladin set's 8 pieces (known from its first explosion)",
+		needName = "the Epic paladin set's 8 pieces at 3 stars or more",
 		defaults = { mode = "event", flash = 0.5, line = { 1, 0.85, 0.4, 1 }, fill = { 1, 0.75, 0.25, 0.25 } },
 	},
 	{

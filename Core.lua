@@ -40,8 +40,8 @@
 --     matched key ("any" for any);
 --   trigger: "kill", "crit", "hit" (each hit of `on` = { spells, names, ticks: its damage over
 --     time's ticks too }) or "burst" (the hits of `on` together, flashed where they centre; atKill:
---     on the body they fit around, atHero: only those around you); by: the spells a kill must come
---     from ({ spells, names }); cap: its "at most N times a second";
+--     on each body they went off from, atHero: only those around you); by: the spells a kill must
+--     come from ({ spells, names }); cap: its "at most N times a second";
 --   buffSpells: the buff it shows with; procOn: the hits that set it off; spot: the hits that
 --     show your hero has it (after a procOn hit, and not your own cast of spot.ownSpell);
 --   free: a spell going off without your casting it ({ spells, names, ownSpell, unless: a proc
@@ -1249,13 +1249,23 @@ local function SourceKeys(s, into)
 	return into;
 end
 
+-- An armor set's quality by its number (0 Common ... 5 PvP), and a class by its number. An armor
+-- piece's item number is 1, its class (2 digits), its place in the set (0 head, 1 shoulders,
+-- 2 chest, 3 waist, 4 legs, 5 feet, 6 wrists, 7 hands), the set's quality, then 0: 102630 is
+-- the Epic paladin set's bracers.
+local SET_QUALITY = { [0] = "common", "uncommon", "rare", "epic", "legendary", "pvp" };
+local SET_CLASS = { [1] = "warrior", [2] = "paladin", [3] = "hunter", [4] = "rogue", [5] = "priest",
+	[7] = "shaman", [8] = "mage", [9] = "warlock", [11] = "druid" };
+
 -- What your gear gives, by what the items' tooltips say (GEAR, from the class files; a
 -- legendary amulet is named "<amulet>: <the spell it remakes>"): keys, and per key the item and
 -- the numbers its own text states (an empowered amulet's grow). Returns how many items it saw.
 -- TALENT_KEYS are the keys a talent gives; every other is an item's, and items can be swapped
--- mid-run.
+-- mid-run. An armor set's 8-piece bonus is all eight of its pieces worn at 3 stars or more
+-- ("set/epic/paladin"), empowered with all eight at the most ("set/epic/paladin/5"); each
+-- piece's stars are in its tooltip ("Upgraded: 4/5 stars").
 local function ReadGear(keys, from, caps, radii, areas, durs)
-	local seen = 0;
+	local seen, worn = 0, {};
 	for slot = 1, 19 do
 		local link = GetInventoryItemLink and GetInventoryItemLink("player", slot);
 		if ( link ) then
@@ -1291,6 +1301,40 @@ local function ReadGear(keys, from, caps, radii, areas, durs)
 					end
 				end
 			end
+			-- an armor piece: which set it is of, and its stars
+			local _, _, id = string.find(link, "item:(%d+)");
+			id = tonumber(id) or 0;
+			local class, piece, q = math.floor(id / 1000) - 100, math.floor(id / 100) - 10 * math.floor(id / 1000),
+				math.floor(id / 10) - 10 * math.floor(id / 100);
+			if ( SET_CLASS[class] and SET_QUALITY[q] and piece <= 7 and id == 10 * math.floor(id / 10) ) then
+				local stars, most;
+				for i = 1, table.getn(lines) do
+					local n = Find(lines[i], "Upgraded: ([%d%.]+)/");
+					if ( n ) then
+						stars, most = n, Find(lines[i], "/([%d%.]+) stars");
+					end
+				end
+				worn[piece] = { set = SET_QUALITY[q] .. "/" .. SET_CLASS[class], stars = stars, most = most };
+			end
+		end
+	end
+	local set, low, top = nil, 99, true;
+	for piece = 0, 7 do
+		local w = worn[piece];
+		if ( not w or not w.stars or ( set and w.set ~= set ) ) then
+			set = false;
+			break;
+		end
+		set, low = w.set, math.min(low, w.stars);
+		top = top and w.most ~= nil and w.stars >= w.most;
+	end
+	if ( set and low >= 3 ) then
+		set = "set/" .. set;
+		keys[set] = true;
+		from[set] = from[set] or "the armor you wear";
+		if ( top ) then
+			keys[set .. "/5"] = true;
+			from[set .. "/5"] = from[set .. "/5"] or "the armor you wear";
 		end
 	end
 	return seen;
@@ -1583,13 +1627,11 @@ local function HitKeys(ev)
 	local key = ev.meterSourceKey;
 	if ( type(key) == "string" ) then
 		keys[Norm(key)] = true;
-		-- an armor set's bonus, "set:<quality>.<class>" (".empowered" with all eight at 5 stars):
+		-- an armor set's bonus, "set:<class>.<quality>" (".empowered" too with all eight at 5 stars):
 		-- "set/epic/paladin" (and "set/epic/paladin/5"); a set past the six qualities is T0.5's
-		local _, _, q, rest = string.find(key, "^set:(%d+)%.(.+)$");
+		local _, _, class, q, rest = string.find(key, "^set:(%a+)%.(%d+)(.*)$");
 		if ( q ) then
-			local names = { [0] = "common", "uncommon", "rare", "epic", "legendary", "pvp" };
-			local set = "set/" .. (names[tonumber(q)] or "t05") .. "/"
-				.. string.lower((string.gsub((string.gsub(rest, "%.?empowered", "")), "[^%a]", "")));
+			local set = "set/" .. (SET_QUALITY[tonumber(q)] or "t05") .. "/" .. string.lower(class);
 			keys[set] = true;
 			if ( string.find(rest, "empowered") ) then
 				keys[set .. "/5"] = true;
@@ -1610,7 +1652,7 @@ end
 
 -- Does hit `ev` match `rule` ({ spells, names, source, crit, ticks })? A damage-over-time tick does
 -- only for a rule with ticks. Its names are the ability's or the meter line's it is credited to;
--- source, a pattern its meter source key fits ("^set:3%.paladin": an armor set's bonus).
+-- source, a pattern its meter source key fits ("^set:paladin%.3": an armor set's bonus).
 local function Hits(ev, rule)
 	if ( ( Truthy(ev.periodic) and not rule.ticks ) or ( rule.crit and not Truthy(ev.critical) ) ) then
 		return false;
@@ -1693,7 +1735,7 @@ local sizes = {};          -- def id -> { lo, hi }: its size before your Area, a
 local lags = {};           -- def id -> how late the spell list showed its latest casts (8), in sec
 local FIRST_TICK = 0.25;   -- a spot's first tick, after its cast
 local bursts = {};         -- def id -> { xs, ys }: the hits of a burst in this read of the feed
-local bodies = {};         -- where enemies died lately, the latest 24: { x, y, at }
+local bodies = {};         -- where enemies died lately, the latest 24: { x, y, at, t: who, ev: the killing hit }
 local FOES = { "enemy", "elite", "guardian", "boss", "finalBoss" };
 local FOE = { enemy = true, elite = true, guardian = true, boss = true, finalBoss = true };
 local GONE = { fallen = true, dead = true, departed = true };
@@ -2181,12 +2223,79 @@ local function Fire(def, x, y, now, cap)
 	table.insert(rings, { kind = def.id, x = x, y = y, at = now });
 end
 
+-- The bodies a burst's hits `b` went off from (atKill), each flashed once: those that died lately
+-- the way it needs (by: Judgement's kills; needs: with your Rupture on them) all went off, so each
+-- with a hit within its reach does; for one that may or may not go off (Redemption's chance),
+-- the fewest bodies the hits fit around, latest first. Hits around a body that flashed already are
+-- its late ones. Hits no body takes (their death unseen): one flash where they centre, if no body
+-- flashed for these.
+local function KillBursts(a, b, now)
+	local reach, window = (a.size + 1.5) * (a.size + 1.5), DotWindow();
+	local need = a.def.needs and a.def.needs[a.has];
+	local sure, left, n, any = a.def.by or need, {}, table.getn(b.xs), false;
+	local function Near(d, i)
+		local dx, dy = b.xs[i] - d.x, b.ys[i] - d.y;
+		return dx * dx + dy * dy <= reach;
+	end
+	for i = 1, n do
+		left[i] = true;
+		for k = 1, table.getn(bodies) do
+			local d = bodies[k];
+			if ( d.shown and d.shown[a.def.id] and now - d.at < 3 and Near(d, i) ) then
+				left[i] = nil;
+			end
+		end
+	end
+	while ( true ) do
+		local best, most = nil, 0;
+		for k = table.getn(bodies), 1, -1 do
+			local d = bodies[k];
+			if ( now - d.at < 3 and not ( d.shown and d.shown[a.def.id] )
+				and ( not a.def.by or ( d.ev and KilledBy(d.ev, a.def.by) ) )
+				and ( not need or Afflicted(need, d.t, d.at, window) ) ) then
+				local count = 0;
+				for i = 1, n do
+					if ( ( sure or left[i] ) and Near(d, i) ) then
+						count = count + 1;
+					end
+				end
+				if ( count > most ) then
+					best, most = d, count;
+				end
+			end
+		end
+		if ( not best ) then
+			break;
+		end
+		best.shown = best.shown or {};
+		best.shown[a.def.id] = true;
+		for i = 1, n do
+			if ( Near(best, i) ) then
+				left[i] = nil;
+			end
+		end
+		any = true;
+		Fire(a.def, best.x, best.y, now, a.def.cap);
+	end
+	local xs, ys = {}, {};
+	for i = 1, n do
+		if ( left[i] ) then
+			table.insert(xs, b.xs[i]);
+			table.insert(ys, b.ys[i]);
+		end
+	end
+	if ( not any and table.getn(xs) > 0 ) then
+		local x, y = Middle(xs, ys);
+		Fire(a.def, x, y, now, a.def.cap);
+	end
+end
+
 -- A burst's hits in this read of the feed (active: as PollEvents has them; p: where you are).
 local function FlushBursts(now, p, active)
 	-- a burst's hits in this read: one flash where they centre, or, for one that goes off from a
-	-- body (atKill), on the latest one that died lately with all of them within its reach. One that
-	-- goes off around you (atHero: a free trap) counts when they centre within its reach of you and
-	-- your own cast of it (ownSpell) isn't what they are; its flash is where you are.
+	-- body (atKill), on each body it went off from (KillBursts). One that goes off around you
+	-- (atHero: a free trap) counts when they centre within its reach of you and your own cast of it
+	-- (ownSpell) isn't what they are; its flash is where you are.
 	for j = 1, table.getn(active) do
 		local a = active[j];
 		local b = bursts[a.def.id];
@@ -2198,20 +2307,11 @@ local function FlushBursts(now, p, active)
 				Fire(a.def, p.x, p.y, now, a.def.cap);
 			end
 			bursts[a.def.id] = nil;
+		elseif ( b and a.def.atKill ) then
+			KillBursts(a, b, now);
+			bursts[a.def.id] = nil;
 		elseif ( b ) then
 			local x, y = Middle(b.xs, b.ys);
-			local reach = (a.size + 1.5) * (a.size + 1.5);
-			for k = table.getn(bodies), 1, -1 do
-				local d, fits = bodies[k], a.def.atKill and now - bodies[k].at < 3;
-				for i = 1, table.getn(b.xs) do
-					local dx, dy = b.xs[i] - d.x, b.ys[i] - d.y;
-					fits = fits and dx * dx + dy * dy <= reach;
-				end
-				if ( fits ) then
-					x, y = d.x, d.y;
-					break;
-				end
-			end
 			Fire(a.def, x, y, now, a.def.cap);
 			bursts[a.def.id] = nil;
 		end
@@ -2336,11 +2436,12 @@ local function PollEvents(now, p, active, onShield)
 						-- a kill: each kill effect your hero has, if the enemy died the way it needs
 						-- (with your DoT on it, by the right spells)
 						killed[t] = now;
-						table.insert(bodies, { x = x, y = y, at = now });
+						local killer = evs[lastOf[t] or i];
+						-- the body, who it was and what killed it (for the bursts that go off from one)
+						table.insert(bodies, { x = x, y = y, at = now, t = t, ev = killer });
 						if ( table.getn(bodies) > 24 ) then
 							table.remove(bodies, 1);
 						end
-						local killer = evs[lastOf[t] or i];
 						for j = 1, table.getn(active) do
 							local a = active[j];
 							if ( a.def.trigger == "kill" ) then

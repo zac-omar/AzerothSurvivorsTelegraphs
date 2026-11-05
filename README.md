@@ -163,7 +163,9 @@ Every ring lasts exactly as long as its spell: the tooltip's duration, made exac
 
 ### Armor sets
 
-An armor set's 8-piece bonus (all eight pieces of one quality at 3 stars or more) is known from its own hits, as the game credits them to the set. The explosions (Judgement, Rupture, Flame Shock) show from the first one, on the body. Bonuses that go off around a target (Starfire, Hammer of Justice, Thunderburst) and the Power Word: Shield explosion show from their second one on, once the first has shown you have the set. Bonuses that make a spell wider or longer are in its tooltip, so its telegraph already has them.
+An armor set's 8-piece bonus (all eight pieces of one set at 3 stars or more) is known from the armor you wear: the addon checks your eight armor pieces, and each piece's stars from its tooltip ("Upgraded: 4/5 stars"). With all eight at 5 stars the bonus is empowered. T0.5 sets are known from their own hits instead, as the game credits them to the set, and so is any set whose pieces' stars can't be read.
+
+The explosions (Judgement, Rupture, Flame Shock) show on the body as they go off. Starfire's bursts and the Power Word: Shield explosion show from the first one when your armor shows the set. The T0.5 bonuses (Hammer of Justice, Thunderburst) show from their second one on, once the first has shown you have the set. Bonuses that make a spell wider or longer are in its tooltip, so its telegraph already has them.
 
 A ground ring stays where its spell was put, even with the 8-piece bonus that makes Consecration (Uncommon paladin set), Volley (Epic hunter set) or Blizzard (Epic mage set) move with you: that bonus has no hits of its own to tell it by.
 

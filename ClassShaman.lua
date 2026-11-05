@@ -60,9 +60,10 @@ AST_Register("shaman", {
 		id = "set_flameshock", name = "Uncommon set: Flame Shock kills", shape = "enemy", trigger = "burst", atKill = true,
 		kind = "Sets", radius = 8,
 		desc = "With all 8 pieces of the Uncommon shaman armor set at 3 stars or more, enemies dying with your Flame Shock on them explode: where they do.",
-		on = { source = "^set:1%.shaman" },
+		on = { source = "^set:shaman%.1" },
+		needs = { ["set/uncommon/shaman/5"] = "flameshock", ["set/uncommon/shaman"] = "flameshock" },
 		match = { "set/uncommon/shaman/5", "set/uncommon/shaman" }, talentKeys = { "set/uncommon/shaman/5", "set/uncommon/shaman" }, showsItself = true,
-		needName = "the Uncommon shaman set's 8 pieces (known from its first explosion)",
+		needName = "the Uncommon shaman set's 8 pieces at 3 stars or more",
 		defaults = { mode = "event", flash = 0.5, line = { 1, 0.55, 0.25, 1 }, fill = { 1, 0.4, 0.1, 0.25 } },
 	},
 	{
@@ -96,5 +97,9 @@ AST_Register("shaman", {
 		{ "Rockbiter Weapon's primary hit unleashes", "item/rockbiter" },
 		{ "Amulet of the Ancients: Magma Totem", "item/magmatotem" },
 		{ "^Magma Totem: %+", "item/magmatotem" },
+	},
+	-- damage over time an enemy can die with: Flame Shock's burn
+	dots = {
+		flameshock = { spells = { 8050 }, names = { "flameshock" }, keys = { "flameshock" } },
 	},
 });

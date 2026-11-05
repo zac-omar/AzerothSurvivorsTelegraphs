@@ -81,7 +81,7 @@ AST_Register("druid", {
 		kind = "Sets",
 		desc = "With all 8 pieces of the Epic druid armor set at 3 stars or more, every Starfire bursts on the enemies around its target: the area it hits.",
 		match = { "set/epic/druid" }, talentKeys = { "set/epic/druid" },
-		needName = "the Epic druid set's 8 pieces (known from its first burst)",
+		needName = "the Epic druid set's 8 pieces at 3 stars or more",
 		on = { spells = { 2912 }, names = { "starfire" } },
 		defaults = { mode = "event", flash = 0.4, line = { 0.85, 0.65, 1, 1 }, fill = { 0.7, 0.5, 1, 0.25 } },
 	},
