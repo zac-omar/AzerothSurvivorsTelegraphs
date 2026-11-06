@@ -917,14 +917,15 @@ local function ScanAction(slot)
 	return TipLines("SetAction", slot);
 end
 
-local tipSize = {};    -- by id: { value, slot }
-local nextFullScan = {};
+-- Tooltip reads: tipSize by def id { value, slot }; nextFullScan by def id; readAt: def id ->
+-- when its tooltip size was last read.
+local tips = { tipSize = {}, nextFullScan = {}, readAt = {} };
 
 local function ReadSize(def, now)
-	local c = tipSize[def.id];
+	local c = tips.tipSize[def.id];
 	if ( not c ) then
 		c = {};
-		tipSize[def.id] = c;
+		tips.tipSize[def.id] = c;
 	end
 	local function TryRead(slot)
 		if ( HasAction and not HasAction(slot) ) then
@@ -975,10 +976,10 @@ local function ReadSize(def, now)
 		return;
 	end
 	c.slot = nil;
-	if ( now < (nextFullScan[def.id] or 0) ) then
+	if ( now < (tips.nextFullScan[def.id] or 0) ) then
 		return;
 	end
-	nextFullScan[def.id] = now + 5;
+	tips.nextFullScan[def.id] = now + 5;
 	for slot = 1, 120 do
 		if ( TryRead(slot) ) then
 			return;
@@ -1027,7 +1028,7 @@ local function SizeOf(def, st, now, has, stated)
 	elseif ( def.radius ) then
 		return def.radius, def.sizeLabel or "fixed";
 	end
-	local c = tipSize[def.id];
+	local c = tips.tipSize[def.id];
 	if ( c and c.value ) then
 		return c.value, "tooltip";
 	elseif ( not def.base ) then
@@ -1048,7 +1049,7 @@ end
 -- it rounds to the tooltip's, else the tooltip's. A spot ticks on `tail` sec more (0.3, its last
 -- tick 0.25 sec after the time is up; a totem 0).
 local function DurationOf(def)
-	local t = tipSize[def.id];
+	local t = tips.tipSize[def.id];
 	local tip = (t and t.duration) or def.duration or 5;
 	local d = tip;
 	if ( def.recDuration ) then
@@ -1234,7 +1235,19 @@ end
 -- What your hero has (owned, above), and the effects whose own damage the combat text has shown
 -- this run
 
-local learned = {};        -- key -> when that effect's own damage was last seen this run
+-- What the effects have seen (CheckRun wipes learned, killed, dots, procHit, spotCast and lags
+-- when a new run starts):
+--   learned: key -> when that effect's own damage was last seen this run
+--   killed: target id -> when, so one death counts once
+--   dots: DoT key -> { target id -> the last tick of your DoT on it }
+--   procHit: def id -> when its procOn last hit
+--   spotCast: def id -> the cast its newest spot came of
+--   lags: def id -> how late the spell list showed its latest casts (8), in sec
+--   bursts: def id -> { xs, ys }: the hits of a burst in this read of the feed
+--   bodies: where enemies died lately, the latest 24: { x, y, at, t: who, ev: the killing hit }
+--   past: the enemies seen lately (see Remember)
+local fx = { learned = {}, killed = {}, dots = {}, procHit = {}, spotCast = {}, lags = {}, bursts = {},
+	bodies = {}, past = { reach = 0 } };
 
 -- Every key a meter source answers to: its name, item, talent and spell, and "item/<spell>"
 -- for an amulet that remakes a spell.
@@ -1504,7 +1517,7 @@ local function Has(def, now)
 	end
 	for i = 1, table.getn(def.match) do
 		local k = def.match[i];
-		local at = learned[k];
+		local at = fx.learned[k];
 		if ( at and ( TALENT_KEYS[k] or ( not owned.gearSeen and now - at < 15 ) ) ) then
 			return k, "seen";
 		end
@@ -1518,13 +1531,10 @@ end
 -- target is dead (targetState) when its anchor is projected.
 
 local rings = {};          -- { kind = def id, x, y (world), at }
-local ctCursor, ctPrimed, ctNext = nil, false, 0;
-local ctStatus = "not read yet";
+-- The combat text feed's reader: ctCursor, ctPrimed, ctNext, ctStatus, lastEvent, lastProjection.
+local feed = { ctPrimed = false, ctNext = 0, ctStatus = "not read yet" };
 local fired = {};          -- def id -> how many times it went off
 local lastFire = {};       -- def id -> when, for the "at most N times a second" caps
-local killed = {};         -- target id -> when, so one death counts once
-local dots = {};           -- DoT key -> { target id -> the last tick of your DoT on it }
-local lastEvent, lastProjection;
 
 local function Truthy(v)
 	return v == true or v == 1 or v == "1" or v == "true";
@@ -1563,7 +1573,7 @@ local function Afflicted(key, t, now, window)
 		end
 		return false;
 	end
-	local list = dots[key];
+	local list = fx.dots[key];
 	return list ~= nil and list[t] ~= nil and now - list[t] < window;
 end
 
@@ -1590,16 +1600,16 @@ end
 -- A talent's own timer (def.clock): the seconds left to its next go and the whole wait, from the
 -- clocks the build screen shows (AZS_GetTimers), or else counted from the goes seen. A clock that
 -- starts over is a go.
-local clocks, clocksAt, clockLeft = {}, -1, {};
+local clk = { clocks = {}, clocksAt = -1, clockLeft = {} };
 
 local function ClockOf(def, now)
-	if ( now - clocksAt >= 0.1 ) then
-		clocksAt = now;
+	if ( now - clk.clocksAt >= 0.1 ) then
+		clk.clocksAt = now;
 		local list = type(AZS_GetTimers) == "function" and AZS_GetTimers();
-		clocks = type(list) == "table" and list or {};
+		clk.clocks = type(list) == "table" and list or {};
 	end
-	for i = 1, table.getn(clocks) do
-		local t = clocks[i];
+	for i = 1, table.getn(clk.clocks) do
+		local t = clk.clocks[i];
 		local left, max, named = nil, nil, false;
 		if ( type(t) == "table" ) then
 			left, max = tonumber(t.remaining), tonumber(t.duration);
@@ -1608,10 +1618,10 @@ local function ClockOf(def, now)
 			end
 		end
 		if ( named and left and max and max > 0 ) then
-			if ( clockLeft[def.id] and left > clockLeft[def.id] + 0.5 ) then
+			if ( clk.clockLeft[def.id] and left > clk.clockLeft[def.id] + 0.5 ) then
 				Proc(def.id, now, 1);
 			end
-			clockLeft[def.id] = left;
+			clk.clockLeft[def.id] = left;
 			return left, max;
 		end
 	end
@@ -1682,23 +1692,22 @@ end
 -- Effects that go off on their own (a def's procOn: Chastise on a Smite crit), and the hits that
 -- show your hero has one (its spot: a hit of the spot's spell soon after a procOn hit, that isn't
 -- your own cast of spot.ownSpell, which comes when that spell is ready or just went off).
-local procHit = {};        -- def id -> when its procOn last hit
 
 local function ProcHits(ev, now)
 	for j = 1, table.getn(DEFS) do
 		local def = DEFS[j];
 		if ( def.procOn and Hits(ev, def.procOn) ) then
-			procHit[def.id] = now;
+			fx.procHit[def.id] = now;
 			Proc(def.id, now, def.procOn.gap or 0.25);
 		elseif ( def.procOn and ev.effect == def.id ) then
 			Proc(def.id, now, def.procOn.gap or 0.25);
 		end
 		local spot = def.spot;
-		if ( spot and procHit[def.id] and now - procHit[def.id] < (spot.window or 0.6) and Hits(ev, spot) ) then
+		if ( spot and fx.procHit[def.id] and now - fx.procHit[def.id] < (spot.window or 0.6) and Hits(ev, spot) ) then
 			local own = spot.ownSpell and byId[spot.ownSpell];
 			local c = own and SpellOf(own);
 			if ( not ( c and ( (c.left or 0) <= 0.5 or ( c.castAt and math.abs(now - c.castAt) < 0.6 ) ) ) ) then
-				learned[def.match[1]] = now;
+				fx.learned[def.match[1]] = now;
 			end
 		end
 		-- a free go of a spell (Radiance's Holy Nova): its hits while your own is on cooldown and
@@ -1732,7 +1741,7 @@ local function ProcHits(ev, now)
 						end
 						table.insert(goes, now);
 						if ( sure ) then
-							learned[def.match[1]] = now;
+							fx.learned[def.match[1]] = now;
 							Proc(def.id, now, 1);
 						end
 					end
@@ -1775,12 +1784,8 @@ local spots = {};          -- { id = def id, x, y (world), at, dur, xs, ys: its 
                            --   cands: the enemies it can be on (a cast's spot), tip, r: its
                            --   tooltip's radius and the one it was placed with, first: the enemies
                            --   its first tick hit, by id; shown: a spot of hits alone, on screen }
-local spotCast = {};       -- def id -> the cast its newest spot came of
 local sizes = {};          -- def id -> { lo, hi }: its size before your Area, as its ticks bound it
-local lags = {};           -- def id -> how late the spell list showed its latest casts (8), in sec
 local FIRST_TICK = 0.25;   -- a spot's first tick, after its cast
-local bursts = {};         -- def id -> { xs, ys }: the hits of a burst in this read of the feed
-local bodies = {};         -- where enemies died lately, the latest 24: { x, y, at, t: who, ev: the killing hit }
 local FOES = { "enemy", "elite", "guardian", "boss", "finalBoss" };
 local FOE = { enemy = true, elite = true, guardian = true, boss = true, finalBoss = true };
 local GONE = { fallen = true, dead = true, departed = true };
@@ -1838,29 +1843,28 @@ end
 -- while a cast or a first tick is due (`close`), else every 0.1 sec once a cast could come. The
 -- latest 48: every frame of the last 0.2 sec, one every 0.1 sec before. The oldest first; their
 -- tables are reused. `reach`: the farthest any of those spells looks (its range and its radius).
-local past = { reach = 0 };
 local function Remember(p, now, reach, close)
-	past.reach = math.max(past.reach, reach);
-	local last = past[table.getn(past)];
+	fx.past.reach = math.max(fx.past.reach, reach);
+	local last = fx.past[table.getn(fx.past)];
 	if ( last and now >= last.at and ( now - last.at < 0.1 and not close or now == last.at ) ) then
 		return;
 	end
 	local t;
-	if ( table.getn(past) >= 48 ) then
+	if ( table.getn(fx.past) >= 48 ) then
 		local k = 1;
-		for i = 2, table.getn(past) - 1 do
-			if ( now - past[i].at > 0.2 and past[i + 1].at - past[i - 1].at < 0.1 ) then
+		for i = 2, table.getn(fx.past) - 1 do
+			if ( now - fx.past[i].at > 0.2 and fx.past[i + 1].at - fx.past[i - 1].at < 0.1 ) then
 				k = i;
 				break;
 			end
 		end
-		t = table.remove(past, k);
+		t = table.remove(fx.past, k);
 	else
 		t = { xs = {}, ys = {}, ids = {} };
 	end
-	ReadFoes(p, past.reach, t);
+	ReadFoes(p, fx.past.reach, t);
 	t.at = now;
-	table.insert(past, t);
+	table.insert(fx.past, t);
 end
 
 -- Where they stood at `when`: between the two kept either side of it, each enemy in both moved
@@ -1869,11 +1873,11 @@ end
 -- Nil when none kept is within 0.15 sec of it.
 local function Blend(when)
 	local a, b;
-	for i = 1, table.getn(past) do
-		if ( past[i].at <= when ) then
-			a = past[i];
+	for i = 1, table.getn(fx.past) do
+		if ( fx.past[i].at <= when ) then
+			a = fx.past[i];
 		elseif ( not b ) then
-			b = past[i];
+			b = fx.past[i];
 		end
 	end
 	if ( not ( a and b ) or b.at - a.at > 0.25 ) then
@@ -2185,7 +2189,7 @@ local function SpotHit(def, x, y, now, R, dur, ev, freed)
 			end
 		end
 	end
-	if ( not s and spotCast[def.id] ) then
+	if ( not s and fx.spotCast[def.id] ) then
 		-- a stray: the first few of each storm go in the spot log
 		if ( latest ) then
 			latest.strays = (latest.strays or 0) + 1;
@@ -2284,8 +2288,8 @@ local function KillBursts(a, b, now)
 	end
 	for i = 1, n do
 		left[i] = true;
-		for k = 1, table.getn(bodies) do
-			local d = bodies[k];
+		for k = 1, table.getn(fx.bodies) do
+			local d = fx.bodies[k];
 			if ( d.shown and d.shown[a.def.id] and now - d.at < 3 and Near(d, i) ) then
 				left[i] = nil;
 			end
@@ -2293,8 +2297,8 @@ local function KillBursts(a, b, now)
 	end
 	while ( true ) do
 		local best, most = nil, 0;
-		for k = table.getn(bodies), 1, -1 do
-			local d = bodies[k];
+		for k = table.getn(fx.bodies), 1, -1 do
+			local d = fx.bodies[k];
 			if ( now - d.at < 3 and not ( d.shown and d.shown[a.def.id] )
 				and ( not a.def.by or ( d.ev and KilledBy(d.ev, a.def.by) ) )
 				and ( not need or Afflicted(need, d.t, d.at, window) ) ) then
@@ -2343,7 +2347,7 @@ local function FlushBursts(now, p, active)
 	-- (ownSpell) isn't what they are; its flash is where you are.
 	for j = 1, table.getn(active) do
 		local a = active[j];
-		local b = bursts[a.def.id];
+		local b = fx.bursts[a.def.id];
 		local own = b and a.def.atHero and a.def.ownSpell and cds[Norm(a.def.ownSpell)];
 		if ( b and a.def.atHero ) then
 			local x, y = Middle(b.xs, b.ys);
@@ -2351,14 +2355,14 @@ local function FlushBursts(now, p, active)
 				and not ( own and ( (own.left or 0) <= 0.5 or ( own.castAt and math.abs(now - own.castAt) < 1.2 ) ) ) ) then
 				Fire(a.def, p.x, p.y, now, a.def.cap);
 			end
-			bursts[a.def.id] = nil;
+			fx.bursts[a.def.id] = nil;
 		elseif ( b and a.def.atKill ) then
 			KillBursts(a, b, now);
-			bursts[a.def.id] = nil;
+			fx.bursts[a.def.id] = nil;
 		elseif ( b ) then
 			local x, y = Middle(b.xs, b.ys);
 			Fire(a.def, x, y, now, a.def.cap);
-			bursts[a.def.id] = nil;
+			fx.bursts[a.def.id] = nil;
 		end
 	end
 end
@@ -2368,26 +2372,26 @@ end
 local function PollEvents(now, p, active, onShield)
 	-- every 0.1 sec of GetTime()'s, the game standing still or not: the feed keeps 5 sec of them
 	local real = now + clockGap;
-	if ( real < ctNext or type(AZS_GetCombatTextEvents) ~= "function" ) then
+	if ( real < feed.ctNext or type(AZS_GetCombatTextEvents) ~= "function" ) then
 		return;
 	end
-	ctNext = real + 0.1;
-	local res, err = AZS_GetCombatTextEvents(ctCursor, 256);
+	feed.ctNext = real + 0.1;
+	local res, err = AZS_GetCombatTextEvents(feed.ctCursor, 256);
 	if ( not res ) then
-		ctStatus = "feed: " .. ErrText(err);
+		feed.ctStatus = "feed: " .. ErrText(err);
 		if ( type(err) == "table" and ( err.code == "STREAM_CHANGED" or err.code == "INVALID_ARGUMENT" ) ) then
-			ctCursor, ctPrimed = nil, false;
+			feed.ctCursor, feed.ctPrimed = nil, false;
 		end
 		return;
 	end
-	ctCursor = res.nextCursor or res.cursor or ctCursor;
+	feed.ctCursor = res.nextCursor or res.cursor or feed.ctCursor;
 	local events = Entries(res, "events") or {};
 	-- the feed's clock now, for when each hit was shown
 	local clock = tonumber(res.clockSeconds);
-	if ( not ctPrimed ) then
+	if ( not feed.ctPrimed ) then
 		-- the feed keeps 5 seconds: those happened before we looked
-		ctPrimed = true;
-		ctStatus = "listening";
+		feed.ctPrimed = true;
+		feed.ctStatus = "listening";
 		return;
 	end
 	local wantKills, wantCrits, wantHits = false, false, false;
@@ -2409,7 +2413,7 @@ local function PollEvents(now, p, active, onShield)
 	for i = 1, table.getn(events) do
 		local ev = events[i];
 		if ( type(ev) == "table" and ev.kind ~= "miss" ) then
-			lastEvent = ev;
+			feed.lastEvent = ev;
 			local keys = HitKeys(ev);
 			-- an effect's own damage: your hero has it, and it just went off
 			for j = 1, table.getn(DEFS) do
@@ -2417,7 +2421,7 @@ local function PollEvents(now, p, active, onShield)
 				if ( def.match ) then
 					for k = 1, table.getn(def.match) do
 						if ( keys[def.match[k]] ) then
-							learned[def.match[k]] = now;
+							fx.learned[def.match[k]] = now;
 							ev.effect = def.id;
 						end
 					end
@@ -2446,8 +2450,8 @@ local function PollEvents(now, p, active, onShield)
 			if ( t and Truthy(ev.periodic) ) then
 				local dot = DotOf(ev, keys);
 				if ( dot ) then
-					dots[dot] = dots[dot] or {};
-					dots[dot][t] = now;
+					fx.dots[dot] = fx.dots[dot] or {};
+					fx.dots[dot][t] = now;
 				end
 			end
 			if ( ev.anchorId and ev.anchorStatus ~= "unavailable" and table.getn(ids) < 256
@@ -2464,28 +2468,28 @@ local function PollEvents(now, p, active, onShield)
 		local pres, perr = AZS_ProjectCombatTextAnchors(ids, "impact");
 		local list = Entries(pres);
 		if ( not list ) then
-			ctStatus = "projection: " .. ErrText(perr);
+			feed.ctStatus = "projection: " .. ErrText(perr);
 			return;
 		end
 		local window = DotWindow();
 		for i = 1, table.getn(ids) do
 			local ev, e = evs[i], list[i];
 			if ( type(e) == "table" and type(e.x) == "number" and type(e.y) == "number" ) then
-				lastProjection = e;
+				feed.lastProjection = e;
 				local u, v = Unmap(e.x, e.y);
 				if ( u ) then
 					local x, y = p.x + u, p.y + v;
 					local t = ev.targetId or ev.targetUnitId or ev.anchorId;
 					-- a combat text anchor's target: "alive", "dead" or "unavailable"
-					if ( e.targetState == "dead" and not killed[t] ) then
+					if ( e.targetState == "dead" and not fx.killed[t] ) then
 						-- a kill: each kill effect your hero has, if the enemy died the way it needs
 						-- (with your DoT on it, by the right spells)
-						killed[t] = now;
+						fx.killed[t] = now;
 						local killer = evs[lastOf[t] or i];
 						-- the body, who it was and what killed it (for the bursts that go off from one)
-						table.insert(bodies, { x = x, y = y, at = now, t = t, ev = killer });
-						if ( table.getn(bodies) > 24 ) then
-							table.remove(bodies, 1);
+						table.insert(fx.bodies, { x = x, y = y, at = now, t = t, ev = killer });
+						if ( table.getn(fx.bodies) > 24 ) then
+							table.remove(fx.bodies, 1);
 						end
 						for j = 1, table.getn(active) do
 							local a = active[j];
@@ -2508,8 +2512,8 @@ local function PollEvents(now, p, active, onShield)
 						elseif ( a.def.shape == "ground" and KilledBy(ev, a.def.on) ) then
 							SpotHit(a.def, x, y, now, a.size, a.dur, ev, a.freed);
 						elseif ( a.def.trigger == "burst" and KilledBy(ev, a.def.on) ) then
-							local b = bursts[a.def.id] or { xs = {}, ys = {} };
-							bursts[a.def.id] = b;
+							local b = fx.bursts[a.def.id] or { xs = {}, ys = {} };
+							fx.bursts[a.def.id] = b;
 							table.insert(b.xs, x);
 							table.insert(b.ys, y);
 						end
@@ -2527,14 +2531,14 @@ local function PollEvents(now, p, active, onShield)
 			end
 		end
 	end
-	ctStatus = "listening";
+	feed.ctStatus = "listening";
 	FlushBursts(now, p, active);
-	for t, at in pairs(killed) do
+	for t, at in pairs(fx.killed) do
 		if ( now - at > 3 ) then
-			killed[t] = nil;
+			fx.killed[t] = nil;
 		end
 	end
-	for _, list in pairs(dots) do
+	for _, list in pairs(fx.dots) do
 		for t, at in pairs(list) do
 			if ( now - at > 10 ) then
 				list[t] = nil;
@@ -2554,15 +2558,14 @@ local preview = {};    -- by id: the time a Test press ends
 local info = {};       -- by id: what the options window shows
 local drawCalls, drawnQuads = 0, 0;
 
-local readAt = {};      -- def id -> when its tooltip size was last read
 
 -- A new run: what was learned about the last one goes.
 local function CheckRun()
 	local run = AZS_ZONE and AZS_ZONE.run;
 	if ( run ~= effectsRun ) then
 		effectsRun = run;
-		learned, rings, killed, lastFire = {}, {}, {}, {};
-		procHit, dots, spots, spotCast, sizes, lags = {}, {}, {}, {}, {}, {};
+		fx.learned, rings, fx.killed, lastFire = {}, {}, {}, {};
+		fx.procHit, fx.dots, spots, fx.spotCast, sizes, fx.lags = {}, {}, {}, {}, {}, {};
 		for id in pairs(procs) do
 			procs[id] = nil;
 		end
@@ -2753,13 +2756,13 @@ local function DrawSpots(j, p, now)
 		end
 	end
 	-- a cast the spell list shows (not one the local clock only guessed: the spell may be waiting)
-	if ( c and c.sureAt and c.sureAt ~= spotCast[def.id] and now - c.sureAt < 2 ) then
-		spotCast[def.id] = c.sureAt;
+	if ( c and c.sureAt and c.sureAt ~= fx.spotCast[def.id] and now - c.sureAt < 2 ) then
+		fx.spotCast[def.id] = c.sureAt;
 		-- when it went off: as long before the list came as its first ticks have said, once that has
 		-- held steady over three casts; until then when it came (a line whose cooldown has clearly
 		-- run already: that long before)
 		local base = c.cameAt or c.sureAt;
-		local at, L = ( (c.ran or 0) < 0.15 and base ) or c.sureAt, lags[def.id];
+		local at, L = ( (c.ran or 0) < 0.15 and base ) or c.sureAt, fx.lags[def.id];
 		if ( L and table.getn(L) >= 3 ) then
 			local sorted = {};
 			for i = 1, table.getn(L) do
@@ -2772,7 +2775,7 @@ local function DrawSpots(j, p, now)
 		end
 		-- where the enemies stood then, or (that long ago not kept) where they are now
 		Remember(p, now, range + j.size, true);
-		local q = Blend(at) or past[table.getn(past)];
+		local q = Blend(at) or fx.past[table.getn(fx.past)];
 		local x, y, cands, most;
 		if ( def.atFeet ) then
 			-- set where you stood (a trap), or `offset` yd ahead of where you face (a totem): the one
@@ -2845,8 +2848,8 @@ local function DrawSpots(j, p, now)
 			end
 			if ( s.firstAt and not mixed ) then
 				-- its first tick went off `first` after the cast: how late the list showed it
-				local L = lags[def.id] or {};
-				lags[def.id] = L;
+				local L = fx.lags[def.id] or {};
+				fx.lags[def.id] = L;
 				table.insert(L, s.lag + (s.tickAt - s.firstAt));
 				if ( table.getn(L) > 8 ) then
 					table.remove(L, 1);
@@ -2905,10 +2908,10 @@ local function CollectJobs(now, inRun)
 			-- the tooltip that sizes it: its own, or Holy Nova's for Chastise's novas. A spell the
 			-- spell bar doesn't list (another race's racial) isn't on it to read.
 			local sized = (def.sizeOf and byId[def.sizeOf]) or def;
-			if ( sized.sizePattern and now - (readAt[sized.id] or 0) > 1
+			if ( sized.sizePattern and now - (tips.readAt[sized.id] or 0) > 1
 				and not ( sized.kind == "Racial" and not SpellOf(sized) ) ) then
 				ReadSize(sized, now);
-				readAt[sized.id] = now;
+				tips.readAt[sized.id] = now;
 			end
 			job.size, inf.source = SizeOf(def, st, now, has, has and owned.radii[has]);
 			inf.size = job.size;
@@ -3313,7 +3316,7 @@ local function PrintDebug()
 	for i = 1, table.getn(DEFS) do
 		local def = DEFS[i];
 		local c = SpellOf(def);
-		local t = tipSize[def.id];
+		local t = tips.tipSize[def.id];
 		local inf = info[def.id];
 		Print(def.name .. ": " .. (Settings(def).enabled and "on" or "off")
 			.. (inf and inf.size and string.format(", size %.1f yd (%s)", inf.size, tostring(inf.source)) or "")
@@ -3325,19 +3328,19 @@ end
 
 -- What the combat text feed gave last, and what the effects know.
 local function PrintEvents()
-	Print("last hit: " .. Dump(lastEvent));
-	Print("its source: " .. Dump(SourceOf(lastEvent)));
-	Print("its projection: " .. Dump(lastProjection));
+	Print("last hit: " .. Dump(feed.lastEvent));
+	Print("its source: " .. Dump(SourceOf(feed.lastEvent)));
+	Print("its projection: " .. Dump(feed.lastProjection));
 	local keys = {};
 	for k in pairs(owned.keys) do
 		table.insert(keys, k);
 	end
 	Print("detected (gear, talents, auras): " .. table.concat(keys, ", "));
 	keys = {};
-	for k in pairs(learned) do
+	for k in pairs(fx.learned) do
 		table.insert(keys, k);
 	end
-	Print("seen going off: " .. table.concat(keys, ", ") .. "; feed " .. ctStatus);
+	Print("seen going off: " .. table.concat(keys, ", ") .. "; feed " .. feed.ctStatus);
 end
 
 -- Your talents as the meter lists them.
