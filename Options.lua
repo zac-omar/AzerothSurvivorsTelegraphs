@@ -1,6 +1,6 @@
 -- The options window. Its pages are tabs down the left side: General (what isn't one
--- telegraph's), one per class that has telegraphs, yours first, and Amulets (the telegraphs any
--- hero can use). A telegraph page lists its telegraphs by kind, with the chosen one's settings
+-- telegraph's), one per class that has telegraphs, yours first, and Any class (the telegraphs
+-- any hero can use). A telegraph page lists its telegraphs by kind, with the chosen one's settings
 -- beside the list. Core.lua hands over what the window needs as AST.
 
 local SOLID = AST.solid;
@@ -26,7 +26,7 @@ local CLASS_COLORS = {
 	rogue = { 1, 0.96, 0.41 }, priest = { 1, 1, 1 }, shaman = { 0, 0.44, 0.87 },
 	mage = { 0.41, 0.8, 0.94 }, warlock = { 0.58, 0.51, 0.79 }, druid = { 1, 0.49, 0.04 },
 };
-local KINDS = { "Spells", "Talents", "Amulets", "Sets", "Other", "Experimental" };
+local KINDS = { "Spells", "Talents", "Amulets", "Sets", "Racial", "Other", "Experimental" };
 local ICONS = {
 	general = "Interface\\Icons\\INV_Misc_Gear_01",
 	common = "Interface\\Icons\\INV_Misc_Gem_01",
@@ -525,7 +525,7 @@ local function BuildNav()
 	ui.nav:SetPoint("BOTTOMLEFT", win, "BOTTOMLEFT", 10, 10);
 	ui.tabs = {};
 	Tab("general", ICONS.general, "General");
-	Tab("common", ICONS.common, "Amulets");
+	Tab("common", ICONS.common, "Any class");
 	ui.classHead = Label(ui.nav, "Classes", "GameFontNormalSmall", true);
 	for class, r in pairs(AST.registry) do
 		if ( class ~= "common" ) then
@@ -557,7 +557,7 @@ local function BuildNav()
 			b.tag:SetText(b.page == myClass and L("you") or "");
 		end
 		v:SetText(version and string.format(L("Version %s"), version) or "");
-		-- General, the classes under their heading, then Amulets
+		-- General, the classes under their heading, then Any class
 		local y = -6;
 		byPage.general:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y);
 		ui.classHead:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 12, y - 40);
@@ -1164,7 +1164,7 @@ ShowPage = function(p)
 		local defs = PageDefs(p);
 		local c = p == "common" and { 1, 0.82, 0 } or ClassColor(p);
 		ui.pageIcon:SetTexture(p == "common" and ICONS.common or (r.icon or ICONS.class));
-		ui.pageTitle:SetText(p == "common" and L("Amulets") or Title(p));
+		ui.pageTitle:SetText(p == "common" and L("Any class") or Title(p));
 		ui.pageTitle:SetTextColor(c[1], c[2], c[3]);
 		local sub = r.blurb and L(r.blurb) or string.format(L("%d telegraphs."), table.getn(defs));
 		if ( p ~= "common" and p == myClass ) then
@@ -1205,12 +1205,12 @@ end
 
 local share;            -- its window, made the first time it opens
 
--- "Paladin 12, Amulets 4": the pages a line holds, how many telegraphs of each
+-- "Paladin 12, Any class 6": the pages a line holds, how many telegraphs of each
 local function SharePages(res)
 	local list, out = AST.SharePages(res), {};
 	for i = 1, table.getn(list) do
 		local p = list[i][1];
-		table.insert(out, (p == "common" and L("Amulets") or Title(p)) .. " " .. list[i][2]);
+		table.insert(out, (p == "common" and L("Any class") or Title(p)) .. " " .. list[i][2]);
 	end
 	return table.concat(out, ", ");
 end
@@ -1340,7 +1340,7 @@ function AST.OpenShare()
 	end
 	local b = share.this;
 	if ( page and page ~= "general" and AST.registry[page] ) then
-		b.text:SetText(string.format(L("Export %s"), page == "common" and L("Amulets") or Title(page)));
+		b.text:SetText(string.format(L("Export %s"), page == "common" and L("Any class") or Title(page)));
 		b:SetWidth(math.max(120, (b.text.GetStringWidth and b.text:GetStringWidth() or 0) + 16));
 		b:Show();
 	else
@@ -1350,7 +1350,7 @@ function AST.OpenShare()
 end
 
 -- The page to open on: your class's, else (your class not known yet) the last one shown, else
--- Amulets.
+-- Any class.
 local function StartPage()
 	local db, _, myClass = AST.State();
 	local p = db.ui.page;

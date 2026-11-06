@@ -173,18 +173,20 @@ A ground ring stays where its spell was put, even with the 8-piece bonus that ma
 
 Not shown: the T0.5 sets' 4-piece bonuses that change a size (Splitting Ice 7 yd, Conflagrate 8 yd, Tranquility 15 yd), since they have no hits of their own to tell them by, and the druid T0.5 Seed of Life.
 
-### Amulets (every class)
+### Any class
 
 | Telegraph | When it shows | Size |
 |---|---|---|
 | **Choker of the Fire Lord** | Where an enemy you kill explodes, while you wear it | 6 yd |
 | **Onyxia Tooth Pendant** | Where your critical hits splash, while you wear it | From the amulet's text (5 yd, more when empowered) |
+| **War Stomp** | Tauren: flashes when War Stomp goes off, stunning everything inside for 2 sec (or fills toward the next one) | Its tooltip (8 yd at base, grows with your Area) |
+| **Escape Artist** | Gnome: flashes when Escape Artist goes off, rooting everything inside for 2 sec (or fills toward the next one) | Its tooltip (8 yd at base, grows with your Area) |
 | **Revive range** | In co-op, around each downed teammate; fills as you bring them back. Stand inside it to revive (6 sec, 9 at Heroic 5+; faster with more friends) | 5 yd |
 | **Custom ring** | A ring of any size around you (off by default; `/ast ring 10` sets it to 10 yd) | Your setting |
 
 Telegraphs stand still while the game does: while you choose an upgrade or a chest's prize, and on the pause screen. Nothing fills or runs out meanwhile, and they carry on when you're back. A **Test** press still plays.
 
-Telegraphs for abilities, items and talents only appear while your hero has them. Abilities, talents and run jewelry come from the damage meter's list of your loadout; amulets are also read from their tooltips as you swap them during a run. The amulets' "at most N times a second" limits, sizes and "+N% area" / "+N% duration" are read from their own text.
+Telegraphs for abilities, items and talents only appear while your hero has them, and a racial's only for its race. Abilities, talents and run jewelry come from the damage meter's list of your loadout; amulets are also read from their tooltips as you swap them during a run. The amulets' "at most N times a second" limits, sizes and "+N% area" / "+N% duration" are read from their own text.
 
 Your talents come from the damage meter, which lists each one with its rank. If the meter hasn't got them yet, the addon asks it again every 5 seconds (`/ast meter` shows what it has, `/ast meter off` stops the asking). Until then, a talent with an aura (Shadowform) is recognised from the aura, and the others the first time they go off.
 
@@ -202,9 +204,9 @@ The options window has a tab for each page down its left side:
 
 - **General**: the minimap button, reading your talents from the meter, cone direction, and the commands.
 - **One tab per class**, yours first and marked "you". The window always opens on yours. You can set up another class's telegraphs before you play it.
-- **Amulets**, below the classes: the telegraphs any hero can use (amulets, co-op revives, the custom ring).
+- **Any class**, below the classes: the telegraphs any hero can use (amulets, racials, co-op revives, the custom ring).
 
-A class page lists its telegraphs under **Spells**, **Talents**, **Amulets** and **Sets** (armor set bonuses), and the experimental ones (off by default) under **Experimental**. The dot beside each one turns it on or off, and its colour says where it stands:
+A class page lists its telegraphs under **Spells**, **Talents**, **Amulets** and **Sets** (armor set bonuses), and the experimental ones (off by default) under **Experimental**. The Any class page has **Amulets**, **Racial** and **Other**. The dot beside each one turns it on or off, and its colour says where it stands:
 
 - **Green**: on, and your hero has it now (the spell this run, the talent, the amulet or the set).
 - **Amber**: on, but waiting: your hero doesn't have it right now, or (a free one) its spell's own telegraph is off, so it isn't drawn. Point at the dot to see what it needs.
@@ -227,7 +229,7 @@ If your frame rate drops, lower **Fill detail**, turn off **Glow**, or set **Mos
 
 Click **Import / Export** at the top of the options window, or type `/ast share`.
 
-- **Export every class**, or **Export** the page you're on (a class, or Amulets), puts your setup in the box as one line of text, already selected. Press **Ctrl+C** and share it.
+- **Export every class**, or **Export** the page you're on (a class, or Any class), puts your setup in the box as one line of text, already selected. Press **Ctrl+C** and share it.
 - To use someone else's line, paste it into the box with **Ctrl+V**. Before anything changes, the box says what the line holds (how many telegraphs, which classes). **Import** applies it.
 - A line changes only the telegraphs it holds, each set exactly as the person who exported it had it. So you can take one person's Paladin setup and someone else's Mage setup, or grab one line that sets every class at once.
 - A line from another version of the addon still imports. Telegraphs that version doesn't have are left out, and the box says how many.

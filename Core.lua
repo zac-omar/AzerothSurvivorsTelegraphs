@@ -992,7 +992,9 @@ end
 local talentRanks = {};
 -- What your hero has: its talents and jewelry off the meter's loadout, and per key the numbers
 -- its item's text states (RefreshOwned fills it)
-local owned = { at = -100, keys = {}, from = {}, caps = {}, radii = {}, areas = {}, durs = {} };
+-- (loadoutRead: the meter's talent list was read this run; freeGoes: def id -> the free goes of
+-- its spell seen while it wasn't, see ProcHits)
+local owned = { at = -100, keys = {}, from = {}, caps = {}, radii = {}, areas = {}, durs = {}, freeGoes = {} };
 
 local function TalentRank(key, now)
 	if ( not key ) then
@@ -1484,6 +1486,7 @@ local function RefreshOwned(now)
 			.. (meter.asks > 0 and string.format(AST_L(" (asked %d times this run)"), meter.asks) or "");
 	end
 	owned.keys, owned.from, owned.caps, owned.radii, owned.areas, owned.durs = keys, from, caps, radii, areas, durs;
+	owned.loadoutRead = talents ~= nil;
 end
 
 -- The key that gives `def` to your hero and how that is known (the item, "talent", "loadout"
@@ -1616,8 +1619,10 @@ local function ClockOf(def, now)
 	if ( not at ) then
 		return nil;
 	end
-	-- the wait it was seen to take, near the one it should
-	local every = def.clock.every;
+	-- the wait it was seen to take, near the one it should (Haste shortens a talent's wait as it
+	-- does a cooldown: AZS_STATS.cd is what a cooldown is left at)
+	local cdm = AZS_STATS and tonumber(AZS_STATS.cd);
+	local every = def.clock.every * ((cdm and cdm > 0 and cdm <= 1) and cdm or 1);
 	local gap = procGap[def.id];
 	if ( gap and gap > every * 0.5 and gap < every * 1.5 ) then
 		every = gap;
@@ -1702,8 +1707,36 @@ local function ProcHits(ev, now)
 		if ( free and Hits(ev, free) and not ( free.unless and procs[free.unless] and now - procs[free.unless] < 0.8 ) ) then
 			local c = free.ownSpell and cds[Norm(free.ownSpell)];
 			if ( not ( c and ( (c.left or 0) <= 0.5 or ( c.castAt and math.abs(now - c.castAt) < 1.2 ) ) ) ) then
-				Proc(def.id, now, 1);
-				learned[def.match[1]] = now;
+				if ( Has(def, now) ) then
+					Proc(def.id, now, 1);
+				elseif ( not owned.loadoutRead ) then
+					-- One such go is weak proof when the meter's talent list can't say: your own cast's
+					-- late hits, a second ring or an Echo look the same. It takes two, about the timer's
+					-- wait apart (within a minute, with no timer), unless you can't cast the spell at all.
+					local goes = owned.freeGoes[def.id] or {};
+					owned.freeGoes[def.id] = goes;
+					local n = table.getn(goes);
+					if ( n == 0 or now - goes[n] > 1 ) then
+						local sure = not free.ownSpell;
+						local cdm = AZS_STATS and tonumber(AZS_STATS.cd);
+						local every = def.clock and def.clock.every * ((cdm and cdm > 0 and cdm <= 1) and cdm or 1);
+						for k = 1, n do
+							local gap = now - goes[k];
+							if ( every and gap > every * 0.75 and gap < every * 1.25 )
+								or ( not def.clock and gap < 60 ) then
+								sure = true;
+							end
+						end
+						if ( n >= 8 ) then
+							table.remove(goes, 1);
+						end
+						table.insert(goes, now);
+						if ( sure ) then
+							learned[def.match[1]] = now;
+							Proc(def.id, now, 1);
+						end
+					end
+				end
 			end
 		end
 	end
@@ -2533,7 +2566,7 @@ local function CheckRun()
 		for id in pairs(procs) do
 			procs[id] = nil;
 		end
-		owned.at = -100;
+		owned.at, owned.loadoutRead, owned.freeGoes = -100, nil, {};
 		meter.at, meter.asks, meter.list, meter.status = -100, 0, {}, "not read yet";
 		meter.talents, meter.sources = nil, nil;
 	end
@@ -2869,9 +2902,11 @@ local function CollectJobs(now, inRun)
 				has, how = Has(def, now);
 				inf.has, inf.how = has, how;
 			end
-			-- the tooltip that sizes it: its own, or Holy Nova's for Chastise's novas
+			-- the tooltip that sizes it: its own, or Holy Nova's for Chastise's novas. A spell the
+			-- spell bar doesn't list (another race's racial) isn't on it to read.
 			local sized = (def.sizeOf and byId[def.sizeOf]) or def;
-			if ( sized.sizePattern and now - (readAt[sized.id] or 0) > 1 ) then
+			if ( sized.sizePattern and now - (readAt[sized.id] or 0) > 1
+				and not ( sized.kind == "Racial" and not SpellOf(sized) ) ) then
 				ReadSize(sized, now);
 				readAt[sized.id] = now;
 			end

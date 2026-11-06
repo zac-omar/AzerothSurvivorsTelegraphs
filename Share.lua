@@ -1,5 +1,5 @@
 -- Azeroth Survivors Telegraphs: telegraph setups as a line of text to pass around, a page's (one
--- class's, or Amulets') or every page's at once. Importing a line resets each telegraph it
+-- class's, or Any class') or every page's at once. Importing a line resets each telegraph it
 -- holds to its defaults and then gives it the settings the line has for it, so one class's line
 -- changes only that class's telegraphs: lines from several people can be mixed.
 --
