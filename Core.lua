@@ -3371,7 +3371,7 @@ SlashCmdList["ASTELEGRAPHS"] = function(msg)
 			Print(string.format(AST_L("spot log stopped: %d entries kept. /reload to save them to the settings file."), table.getn(db.spotLogLast)));
 		else
 			db.spotLog = {};
-			Print("recording Blizzard and Flamestrike casts, landings and hits. /ast spotlog again to stop.");
+			Print("recording the ground spells' casts, landings and hits. /ast spotlog again to stop.");
 		end
 	elseif ( cmd == "meter" ) then
 		-- /ast meter: your talents as the meter lists them; /ast meter off|on: stop or start asking it
