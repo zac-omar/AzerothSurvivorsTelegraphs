@@ -284,7 +284,11 @@ end
 ---------------------------------------------------------------------------------------------
 -- Ground to screen
 
-local H = {};          -- the homography: yards from the hero (u, v) -> WorldFrame offsets
+-- The homography: yards from the hero (u, v) -> WorldFrame offsets (1 to 8), and how a height
+-- shows on the screen (9 to 11: what a yard up adds to x's and y's tops and to the bottom). dz:
+-- the height above (below) the hero's feet the shape being drawn is at: 0 for one that goes out
+-- from the hero, the enemies' height for one on them, the ground's for a spot left there.
+local H = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, dz = 0 };
 local scale = 10;      -- screen units per yard at the hero
 local anchor;          -- the entry projected from
 local requests = {};
@@ -351,17 +355,19 @@ local function Solve(a)
 end
 
 local function Map(u, v)
-	local w = H[7] * u + H[8] * v + 1;
+	local dz = H.dz;
+	local w = H[7] * u + H[8] * v + 1 + H[11] * dz;
 	if ( w <= 1e-4 ) then
 		return nil;   -- past the horizon
 	end
-	return (H[1] * u + H[2] * v + H[3]) / w, (H[4] * u + H[5] * v + H[6]) / w;
+	return (H[1] * u + H[2] * v + H[3] + H[9] * dz) / w, (H[4] * u + H[5] * v + H[6] + H[10] * dz) / w;
 end
 
--- A screen point back on the ground at the hero's height.
-local function Unmap(x, y)
-	local a, b, c = H[1] - x * H[7], H[2] - x * H[8], x - H[3];
-	local d, e, f = H[4] - y * H[7], H[5] - y * H[8], y - H[6];
+-- A screen point back on the ground `dz` yd above (below) the hero's feet (nil: at them).
+local function Unmap(x, y, dz)
+	dz = dz or 0;
+	local a, b, c = H[1] - x * H[7], H[2] - x * H[8], x * (1 + H[11] * dz) - H[3] - H[9] * dz;
+	local d, e, f = H[4] - y * H[7], H[5] - y * H[8], y * (1 + H[11] * dz) - H[6] - H[10] * dz;
 	local det = a * e - b * d;
 	if ( math.abs(det) < 1e-9 ) then
 		return nil;
@@ -377,20 +383,21 @@ local SPANS = { 5, 2.5, 1.25 };
 -- states that are the point's, not the anchor's: a smaller span may fix them
 local OFF_VIEW = { offscreen = true, clipped = true, behindCamera = true };
 
--- The four points `s` yards around the hero, projected: their entries, or nil and whether the
--- anchor itself failed.
+-- The four points `s` yards around the hero, projected, and the same four 3 yd up (how a height
+-- shows on the screen; those may fail): their entries, or nil and whether the anchor itself failed.
 local function ProjectCorners(p, s)
 	local dx, dy, dz = p.x - anchor.x, p.y - anchor.y, p.z - anchor.z;
-	for i = 1, 4 do
+	for i = 1, 8 do
 		local r = requests[i];
 		if ( not r ) then
 			r = { attachment = "position", offset = {} };
 			requests[i] = r;
 		end
+		local c = CORNERS[i > 4 and i - 4 or i];
 		r.anchorId = anchor.anchorId;
-		r.offset.x = dx + CORNERS[i][1] * s;
-		r.offset.y = dy + CORNERS[i][2] * s;
-		r.offset.z = dz;
+		r.offset.x = dx + c[1] * s;
+		r.offset.y = dy + c[2] * s;
+		r.offset.z = dz + ( i > 4 and 3 or 0 );
 	end
 	local res, err = AZS_ProjectWorldAnchors(requests);
 	local list = Entries(res);
@@ -446,7 +453,38 @@ local function BuildMap(p)
 		lastError = "the projected points were degenerate";
 		return false;
 	end
-	H = h;
+	for i = 1, 8 do
+		H[i] = h[i];
+	end
+	-- How a height shows: for a point `lift` yd up, x * (H7 u + H8 v + 1 + H11 lift) =
+	-- H1 u + H2 v + H3 + H9 lift (and so for y), a perspective camera's projection, exact. Its
+	-- three numbers from the raised four (eight equations, least squares). Without them every
+	-- shape is drawn at the hero's height, as it was.
+	H[9], H[10], H[11], H.dz = 0, 0, 0, 0;
+	local lift = requests[5].offset.z - requests[1].offset.z;
+	local m11, m22, m33, m13, m23, r1, r2, r3, n = 0, 0, 0, 0, 0, 0, 0, 0, 0;
+	for i = 5, 8 do
+		local e = list[i];
+		if ( type(e) == "table" and type(e.x) == "number" and type(e.y) == "number" and e.state ~= "behindCamera" ) then
+			local u, v = CORNERS[i - 4][1] * s, CORNERS[i - 4][2] * s;
+			local w = H[7] * u + H[8] * v + 1;
+			local bx = e.x * w - (H[1] * u + H[2] * v + H[3]);
+			local by = e.y * w - (H[4] * u + H[5] * v + H[6]);
+			-- rows (lift, 0, -x lift | bx) and (0, lift, -y lift | by)
+			m11, m22 = m11 + lift * lift, m22 + lift * lift;
+			m13, m23 = m13 - e.x * lift * lift, m23 - e.y * lift * lift;
+			m33 = m33 + (e.x * e.x + e.y * e.y) * lift * lift;
+			r1, r2, r3 = r1 + lift * bx, r2 + lift * by, r3 - (e.x * bx + e.y * by) * lift;
+			n = n + 1;
+		end
+	end
+	-- (m12 = 0; symmetric) solved by Cramer's rule
+	local det = m11 * (m22 * m33 - m23 * m23) - m13 * m13 * m22;
+	if ( n >= 2 and math.abs(det) > 1e-9 ) then
+		H[9] = (r1 * (m22 * m33 - m23 * m23) + m13 * (r2 * m23 - m22 * r3)) / det;
+		H[10] = (m11 * (r2 * m33 - m23 * r3) + m13 * (r1 * m23 - m13 * r2)) / det;
+		H[11] = (m11 * (m22 * r3 - r2 * m23) - m13 * m22 * r1) / det;
+	end
 	local x0, y0 = Map(0, 0);
 	local x1, y1 = Map(1, 0);
 	local x2, y2 = Map(0, 1);
@@ -1807,11 +1845,12 @@ local function XY(x, y)
 	return string.format("%.1f,%.1f", x, y);
 end
 
--- The living enemies within `reach` yd of you, into t: t.xs, t.ys, t.ids (the first t.n of them)
--- and where you stood (t.px, t.py).
+-- The living enemies within `reach` yd of you, into t: t.xs, t.ys, t.zs, t.ids (the first t.n of
+-- them) and where you stood (t.px, t.py, t.pz).
 local function ReadFoes(p, reach, t)
 	local cursor;
-	t.n, t.px, t.py = 0, p.x, p.y;
+	t.n, t.px, t.py, t.pz = 0, p.x, p.y, p.z;
+	t.zs = t.zs or {};
 	for page = 1, 16 do
 		local res = AZS_GetWorldAnchors({ kinds = FOES, states = { "living" } }, cursor, 256);
 		if ( not res and page == 1 ) then
@@ -1829,6 +1868,7 @@ local function ReadFoes(p, reach, t)
 				if ( dx * dx + dy * dy <= reach * reach ) then
 					t.n = t.n + 1;
 					t.xs[t.n], t.ys[t.n], t.ids[t.n] = e.x, e.y, e.unitId or e.anchorId or false;
+					t.zs[t.n] = type(e.z) == "number" and e.z or p.z;
 				end
 			end
 		end
@@ -1837,6 +1877,64 @@ local function ReadFoes(p, reach, t)
 			break;
 		end
 	end
+end
+
+-- The enemies' heights, for where hits are: the living ones as last read (cur), and as read before
+-- that (old: one killed since was still there). Read again once 0.2 sec old.
+fx.near = { cur = { xs = {}, ys = {}, zs = {}, ids = {}, n = 0 }, old = { xs = {}, ys = {}, zs = {}, ids = {}, n = 0 },
+	at = -1 };
+
+-- The height of the enemy nearest x, y, within 10 yd of it; nil with none that near.
+fx.FoeZ = function(x, y, p, now)
+	local h = fx.near;
+	if ( now - h.at > 0.2 or now < h.at ) then
+		h.cur, h.old = h.old, h.cur;
+		ReadFoes(p, 80, h.cur);
+		h.at = now;
+	end
+	local best, z = 100, nil;
+	for k = 1, 2 do
+		local t = ( k == 1 ) and h.cur or h.old;
+		for i = 1, t.n do
+			local dx, dy = t.xs[i] - x, t.ys[i] - y;
+			if ( dx * dx + dy * dy < best ) then
+				best, z = dx * dx + dy * dy, t.zs[i];
+			end
+		end
+	end
+	return z;
+end
+
+-- Where a hit shown at screen sx, sy is, and its height: where the line to it meets the ground at
+-- the height of the enemy there (the enemy nearest it, looked for again from each better spot,
+-- three times at most). With no enemy near, on the ground at your height, as before.
+fx.HitSpot = function(sx, sy, p, now)
+	local u, v = Unmap(sx, sy);
+	if ( not u ) then
+		return nil;
+	end
+	local z;
+	for k = 1, 3 do
+		local nz = fx.FoeZ(p.x + u, p.y + v, p, now);
+		if ( not nz or ( z and math.abs(nz - z) < 0.05 ) ) then
+			break;
+		end
+		local u2, v2 = Unmap(sx, sy, nz - p.z);
+		if ( not u2 ) then
+			break;
+		end
+		u, v, z = u2, v2, nz;
+	end
+	return p.x + u, p.y + v, z or p.z;
+end
+
+-- The mean of a list's numbers; nil when it has none.
+fx.Mean = function(list)
+	local sum, n = 0, 0;
+	for i = 1, table.getn(list) do
+		sum, n = sum + list[i], n + 1;
+	end
+	return n > 0 and sum / n or nil;
 end
 
 -- Where the enemies stood a moment ago, while you have a spell that lands on a spot: every frame
@@ -1860,7 +1958,7 @@ local function Remember(p, now, reach, close)
 		end
 		t = table.remove(fx.past, k);
 	else
-		t = { xs = {}, ys = {}, ids = {} };
+		t = { xs = {}, ys = {}, zs = {}, ids = {} };
 	end
 	ReadFoes(p, fx.past.reach, t);
 	t.at = now;
@@ -1887,8 +1985,8 @@ local function Blend(when)
 		a = a or b;
 		return a and math.abs(a.at - when) <= 0.15 and a or nil;
 	end
-	local w, q, at = (when - a.at) / (b.at - a.at), { n = 0, xs = {}, ys = {}, ids = {}, at = when }, {};
-	q.px, q.py = a.px + (b.px - a.px) * w, a.py + (b.py - a.py) * w;
+	local w, q, at = (when - a.at) / (b.at - a.at), { n = 0, xs = {}, ys = {}, zs = {}, ids = {}, at = when }, {};
+	q.px, q.py, q.pz = a.px + (b.px - a.px) * w, a.py + (b.py - a.py) * w, a.pz + (b.pz - a.pz) * w;
 	for i = 1, b.n do
 		if ( b.ids[i] ) then
 			at[b.ids[i]] = i;
@@ -1899,16 +1997,17 @@ local function Blend(when)
 		if ( k ) then
 			q.n = q.n + 1;
 			q.xs[q.n], q.ys[q.n], q.ids[q.n] = a.xs[i] + (b.xs[k] - a.xs[i]) * w, a.ys[i] + (b.ys[k] - a.ys[i]) * w, a.ids[i];
+			q.zs[q.n] = a.zs[i] + (b.zs[k] - a.zs[i]) * w;
 			at[a.ids[i]] = false;
 		elseif ( w < 0.5 ) then
 			q.n = q.n + 1;
-			q.xs[q.n], q.ys[q.n], q.ids[q.n] = a.xs[i], a.ys[i], a.ids[i];
+			q.xs[q.n], q.ys[q.n], q.ids[q.n], q.zs[q.n] = a.xs[i], a.ys[i], a.ids[i], a.zs[i];
 		end
 	end
 	for i = 1, b.n do
 		if ( w >= 0.5 and not ( b.ids[i] and at[b.ids[i]] == false ) ) then
 			q.n = q.n + 1;
-			q.xs[q.n], q.ys[q.n], q.ids[q.n] = b.xs[i], b.ys[i], b.ids[i];
+			q.xs[q.n], q.ys[q.n], q.ids[q.n], q.zs[q.n] = b.xs[i], b.ys[i], b.ids[i], b.zs[i];
 		end
 	end
 	return q;
@@ -1916,13 +2015,14 @@ end
 
 -- Where such a spell lands, from the enemies in t: of those within `range` yd of you, the 24
 -- nearest; of those, the one with the most enemies (itself too) within `radius` yd of it, the
--- farther one on a tie. Its position, the 24, how many it has around it, and which it is.
+-- farther one on a tie. Its position, the 24, how many it has around it, and which it is (its
+-- height: z).
 local function LandingSpot(t, range, radius)
 	local near, cands = {}, {};
 	for i = 1, t.n do
 		local dx, dy = t.xs[i] - t.px, t.ys[i] - t.py;
 		if ( dx * dx + dy * dy <= range * range ) then
-			table.insert(near, { x = t.xs[i], y = t.ys[i], d = dx * dx + dy * dy });
+			table.insert(near, { x = t.xs[i], y = t.ys[i], z = t.zs and t.zs[i], d = dx * dx + dy * dy });
 		end
 	end
 	table.sort(near, function(a, b) return a.d < b.d; end);
@@ -2160,8 +2260,9 @@ end
 -- spell's casts this run, it starts a spot of its own, if the spell can have another out (as many
 -- as its duration spans cooldowns). Once it has, every storm has its cast's spot, and a hit none
 -- takes is a stray. A spot of hits alone sits where they centre until it shows (a cast the list
--- shows late takes it over first), then stays.
-local function SpotHit(def, x, y, now, R, dur, ev, freed)
+-- shows late takes it over first), then stays. z: the hit's height; a spot of hits alone is drawn
+-- at theirs.
+local function SpotHit(def, x, y, now, R, dur, ev, freed, z)
 	local s, near, fresh, live, latest = nil, nil, nil, 0, nil;
 	local unit = ev and ( ev.targetUnitId or ev.targetId );
 	for i = 1, table.getn(spots) do
@@ -2219,17 +2320,20 @@ local function SpotHit(def, x, y, now, R, dur, ev, freed)
 			return;
 		end
 		local q = Blend(at);
-		local fx, fy = nil, nil;
+		local fx, fy, fz = nil, nil, nil;
 		if ( q and def.atFeet ) then
-			fx, fy = q.px, q.py;
+			fx, fy, fz = q.px, q.py, q.pz;
 		elseif ( q ) then
-			fx, fy = LandingSpot(q, def.range or 30, R);
+			local _, _, _, _, best = LandingSpot(q, def.range or 30, R);
+			if ( best ) then
+				fx, fy, fz = best.x, best.y, best.z;
+			end
 		end
 		SpotLog({ ev = "fall", id = def.id, spot = fx and XY(fx, fy) or "none", late = math.floor((now - at) * 100) / 100 });
 		if ( not fx ) then
 			return;
 		end
-		s = { id = def.id, at = at, dur = dur, x = fx, y = fy, xs = {}, ys = {}, shown = true, r = R };
+		s = { id = def.id, at = at, dur = dur, x = fx, y = fy, z = fz, xs = {}, ys = {}, shown = true, r = R };
 		table.insert(spots, s);
 	elseif ( not s ) then
 		local c = SpellOf(def);
@@ -2238,11 +2342,14 @@ local function SpotHit(def, x, y, now, R, dur, ev, freed)
 			-- with a free one out, hits with no cast are the free one's
 			return;
 		end
-		s = { id = def.id, at = now, dur = dur, x = x, y = y, xs = {}, ys = {} };
+		s = { id = def.id, at = now, dur = dur, x = x, y = y, z = z, xs = {}, ys = {} };
 		table.insert(spots, s);
 	end
 	table.insert(s.xs, x);
 	table.insert(s.ys, y);
+	if ( z ) then
+		s.zsum, s.zn = (s.zsum or 0) + z, (s.zn or 0) + 1;
+	end
 	-- a tick past the time it was given: it lasts longer than its tooltip said, so it runs on
 	local when = ev and ev.shownAt or now;
 	if ( when - s.at > s.dur - 0.03 ) then
@@ -2255,6 +2362,9 @@ local function SpotHit(def, x, y, now, R, dur, ev, freed)
 	-- a cast's spot stays where the cast put it
 	if ( not s.cands and not s.shown ) then
 		s.x, s.y = Middle(s.xs, s.ys);
+		if ( s.zn ) then
+			s.z = s.zsum / s.zn;
+		end
 	end
 	if ( table.getn(s.xs) <= 12 ) then
 		SpotLog({ ev = "hit", id = def.id, at = XY(x, y), spot = XY(s.x, s.y), unit = unit,
@@ -2263,13 +2373,14 @@ local function SpotHit(def, x, y, now, R, dur, ev, freed)
 	end
 end
 
-local function Fire(def, x, y, now, cap)
+-- An effect went off at x, y (z: its height; nil: drawn at yours).
+local function Fire(def, x, y, now, cap, z)
 	if ( cap and lastFire[def.id] and now - lastFire[def.id] < 1 / cap ) then
 		return;
 	end
 	lastFire[def.id] = now;
 	fired[def.id] = (fired[def.id] or 0) + 1;
-	table.insert(rings, { kind = def.id, x = x, y = y, at = now });
+	table.insert(rings, { kind = def.id, x = x, y = y, z = z, at = now });
 end
 
 -- The bodies a burst's hits `b` went off from (atKill), each flashed once: those that died lately
@@ -2324,18 +2435,19 @@ local function KillBursts(a, b, now)
 			end
 		end
 		any = true;
-		Fire(a.def, best.x, best.y, now, a.def.cap);
+		Fire(a.def, best.x, best.y, now, a.def.cap, best.z);
 	end
-	local xs, ys = {}, {};
+	local xs, ys, zs = {}, {}, {};
 	for i = 1, n do
 		if ( left[i] ) then
 			table.insert(xs, b.xs[i]);
 			table.insert(ys, b.ys[i]);
+			table.insert(zs, b.zs[i]);
 		end
 	end
 	if ( not any and table.getn(xs) > 0 ) then
 		local x, y = Middle(xs, ys);
-		Fire(a.def, x, y, now, a.def.cap);
+		Fire(a.def, x, y, now, a.def.cap, fx.Mean(zs));
 	end
 end
 
@@ -2353,7 +2465,7 @@ local function FlushBursts(now, p, active)
 			local x, y = Middle(b.xs, b.ys);
 			if ( (x - p.x) * (x - p.x) + (y - p.y) * (y - p.y) <= a.size * a.size
 				and not ( own and ( (own.left or 0) <= 0.5 or ( own.castAt and math.abs(now - own.castAt) < 1.2 ) ) ) ) then
-				Fire(a.def, p.x, p.y, now, a.def.cap);
+				Fire(a.def, p.x, p.y, now, a.def.cap, p.z);
 			end
 			fx.bursts[a.def.id] = nil;
 		elseif ( b and a.def.atKill ) then
@@ -2361,7 +2473,7 @@ local function FlushBursts(now, p, active)
 			fx.bursts[a.def.id] = nil;
 		elseif ( b ) then
 			local x, y = Middle(b.xs, b.ys);
-			Fire(a.def, x, y, now, a.def.cap);
+			Fire(a.def, x, y, now, a.def.cap, fx.Mean(b.zs));
 			fx.bursts[a.def.id] = nil;
 		end
 	end
@@ -2476,9 +2588,9 @@ local function PollEvents(now, p, active, onShield)
 			local ev, e = evs[i], list[i];
 			if ( type(e) == "table" and type(e.x) == "number" and type(e.y) == "number" ) then
 				feed.lastProjection = e;
-				local u, v = Unmap(e.x, e.y);
-				if ( u ) then
-					local x, y = p.x + u, p.y + v;
+				-- where it is, at its enemy's own height (z)
+				local x, y, z = fx.HitSpot(e.x, e.y, p, now);
+				if ( x ) then
 					local t = ev.targetId or ev.targetUnitId or ev.anchorId;
 					-- a combat text anchor's target: "alive", "dead" or "unavailable"
 					if ( e.targetState == "dead" and not fx.killed[t] ) then
@@ -2487,7 +2599,7 @@ local function PollEvents(now, p, active, onShield)
 						fx.killed[t] = now;
 						local killer = evs[lastOf[t] or i];
 						-- the body, who it was and what killed it (for the bursts that go off from one)
-						table.insert(fx.bodies, { x = x, y = y, at = now, t = t, ev = killer });
+						table.insert(fx.bodies, { x = x, y = y, z = z, at = now, t = t, ev = killer });
 						if ( table.getn(fx.bodies) > 24 ) then
 							table.remove(fx.bodies, 1);
 						end
@@ -2497,7 +2609,7 @@ local function PollEvents(now, p, active, onShield)
 								local need = a.def.needs and a.def.needs[a.has];
 								if ( ( not need or Afflicted(need, t, now, window) )
 									and ( not a.def.by or KilledBy(killer, a.def.by) ) ) then
-									Fire(a.def, x, y, now, owned.caps[a.has] or a.def.cap);
+									Fire(a.def, x, y, now, owned.caps[a.has] or a.def.cap, z);
 								end
 							end
 						end
@@ -2508,14 +2620,15 @@ local function PollEvents(now, p, active, onShield)
 						-- a hit effect, on a target with your DoT on it if it needs one (Conflagrate: Immolate)
 						if ( a.def.trigger == "hit" and ev.effect ~= a.def.id and Hits(ev, a.def.on)
 							and ( not need or Afflicted(need, t, now, window) ) ) then
-							Fire(a.def, x, y, now, owned.caps[a.has] or a.def.cap);
+							Fire(a.def, x, y, now, owned.caps[a.has] or a.def.cap, z);
 						elseif ( a.def.shape == "ground" and KilledBy(ev, a.def.on) ) then
-							SpotHit(a.def, x, y, now, a.size, a.dur, ev, a.freed);
+							SpotHit(a.def, x, y, now, a.size, a.dur, ev, a.freed, z);
 						elseif ( a.def.trigger == "burst" and KilledBy(ev, a.def.on) ) then
-							local b = fx.bursts[a.def.id] or { xs = {}, ys = {} };
+							local b = fx.bursts[a.def.id] or { xs = {}, ys = {}, zs = {} };
 							fx.bursts[a.def.id] = b;
 							table.insert(b.xs, x);
 							table.insert(b.ys, y);
+							table.insert(b.zs, z);
 						end
 					end
 					if ( Truthy(ev.critical) and not ( ev.effect and byId[ev.effect] and byId[ev.effect].trigger == "crit" ) ) then
@@ -2523,7 +2636,7 @@ local function PollEvents(now, p, active, onShield)
 						for j = 1, table.getn(active) do
 							local a = active[j];
 							if ( a.def.trigger == "crit" ) then
-								Fire(a.def, x, y, now, owned.caps[a.has] or a.def.cap);
+								Fire(a.def, x, y, now, owned.caps[a.has] or a.def.cap, z);
 							end
 						end
 					end
@@ -2667,7 +2780,8 @@ local function DownedList()
 		if ( type(d) == "table" and d.positionAvailable and type(d.x) == "number" and type(d.y) == "number" ) then
 			local mine = rev.reviving ~= nil and rev.reviving ~= ""
 				and ( tostring(rev.reviving) == tostring(d.id) or rev.reviving == d.name );
-			table.insert(out, { x = d.x, y = d.y, progress = mine and tonumber(rev.rshare) or nil });
+			table.insert(out, { x = d.x, y = d.y, z = type(d.z) == "number" and d.z or nil,
+				progress = mine and tonumber(rev.rshare) or nil });
 		end
 	end
 	return out;
@@ -2680,8 +2794,11 @@ local function DrawDowned(j, p)
 		local cu, cv = d.x, d.y;
 		if ( not d.rel ) then
 			cu, cv = d.x - p.x, d.y - p.y;
+			-- at the height they lie at
+			H.dz = d.z and d.z - p.z or 0;
 		end
 		DrawCircleAt(cu, cv, j.size, j.st, j.alpha, d.progress, nil);
+		H.dz = 0;
 	end
 end
 
@@ -2716,8 +2833,11 @@ local function DrawRings(j, p, now)
 			table.remove(rings, k);
 		elseif ( r.kind == j.def.id and age < st.flash and ( st.most <= 0 or drawn < st.most ) ) then
 			drawn = drawn + 1;
+			-- at the height it went off at, not yours
+			H.dz = r.z and r.z - p.z or 0;
 			DrawCircleAt(r.x - p.x, r.y - p.y, j.size * (0.6 + 0.4 * age / st.flash), st,
 				1 - age / st.flash, nil, nil, 0, 1);
+			H.dz = 0;
 		end
 	end
 end
@@ -2776,18 +2896,21 @@ local function DrawSpots(j, p, now)
 		-- where the enemies stood then, or (that long ago not kept) where they are now
 		Remember(p, now, range + j.size, true);
 		local q = Blend(at) or fx.past[table.getn(fx.past)];
-		local x, y, cands, most;
+		local x, y, cands, most, best, z;
 		if ( def.atFeet ) then
 			-- set where you stood (a trap), or `offset` yd ahead of where you face (a totem): the one
-			-- spot it can be, so it stays there as it is, its size the tooltip's
-			x, y, most = q.px, q.py, 0;
+			-- spot it can be, so it stays there as it is, its size the tooltip's; at the height you
+			-- stood at
+			x, y, z, most = q.px, q.py, q.pz, 0;
 			if ( def.offset ) then
 				local f = (db.mirror and -(p.facing or 0) or (p.facing or 0)) + (db.rotate or 0) * PI / 180;
 				x, y = x + def.offset * math.cos(f), y + def.offset * math.sin(f);
 			end
 			cands = { { x = x, y = y, n = 0 } };
 		else
-			x, y, cands, most = LandingSpot(q, range, j.size);
+			-- on an enemy: at its height
+			x, y, cands, most, best = LandingSpot(q, range, j.size);
+			z = best and best.z;
 		end
 		SpotLog({ ev = "cast", id = def.id, hero = XY(q.px, q.py), spot = x and XY(x, y) or "none",
 			candidates = table.getn(cands), most = most, late = math.floor((now - at) * 100) / 100,
@@ -2814,7 +2937,7 @@ local function DrawSpots(j, p, now)
 				s = { id = def.id, dur = j.dur, xs = {}, ys = {} };
 				table.insert(spots, s);
 			end
-			s.x, s.y, s.at, s.cands, s.tip, s.r = x, y, at, cands, j.tip, j.size;
+			s.x, s.y, s.z, s.at, s.cands, s.tip, s.r = x, y, z, at, cands, j.tip, j.size;
 			s.every, s.tickAt, s.tickN, s.ids, s.lag = every, at + first, 0, {}, base - at;
 			if ( j.tip and not def.atFeet ) then
 				-- with which of the radii its tooltip allows each enemy would have been the spot
@@ -2871,7 +2994,10 @@ local function DrawSpots(j, p, now)
 			if ( age > s.dur ) then
 				fade = 1 - (age - s.dur) / 0.4;
 			end
+			-- at its own height, not yours: it stays on the ground where it is
+			H.dz = s.z and s.z - p.z or 0;
 			DrawSpot(s.x - p.x, s.y - p.y, s.r or j.size, st, j.alpha * fade, math.min(1, age / s.dur));
+			H.dz = 0;
 		end
 	end
 end
@@ -3310,7 +3436,9 @@ local function PrintDebug()
 	Print("class " .. tostring(myClass) .. ", " .. table.getn(DEFS) .. " telegraphs"
 		.. (table.getn(skipped) > 0 and (", left to Priest Telegraphs: " .. table.concat(skipped, ", ")) or ""));
 	Print("anchor: " .. (anchor and (tostring(anchor.kind) .. " " .. tostring(anchor.anchorId)) or "none")
-		.. string.format(", %.1f screen units per yard", scale) .. ", last problem: " .. tostring(lastError or "none"));
+		.. string.format(", %.1f screen units per yard", scale)
+		.. ", heights " .. ( ( H[9] ~= 0 or H[10] ~= 0 or H[11] ~= 0 ) and "on" or "off (drawn at yours)" )
+		.. ", last problem: " .. tostring(lastError or "none"));
 	Print("phase " .. tostring(AZS_GetPhase and AZS_GetPhase()) .. ", run " .. tostring(AZS_ZONE and AZS_ZONE.run)
 		.. ", area " .. tostring(AZS_STATS and AZS_STATS.area) .. ", spells line: " .. spellKeys);
 	for i = 1, table.getn(DEFS) do
