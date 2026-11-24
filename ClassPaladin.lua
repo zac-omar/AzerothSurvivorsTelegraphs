@@ -14,6 +14,7 @@ AST_Register("paladin", {
 		-- "Marks the ground where you stand once enemies come within 8 yd: every enemy within 8 yd of
 		-- that spot takes ... every 1 sec for 11 sec".
 		id = "consecration", name = "Consecration", shape = "ground", spellKey = "consecration", atFeet = true,
+		follows = "set/uncommon/paladin",
 		desc = "Where Consecration hallows the ground: the light fills in from its centre until it fades.",
 		on = { spells = { 26573 }, names = { "consecration" } }, range = 0,
 		tipNames = { "Consecration" }, sizePattern = "within ([%d%.]+) yd of that spot", durationPattern = "of that spot.-for ([%d%.]+) sec",
@@ -27,6 +28,7 @@ AST_Register("paladin", {
 		-- death save brings one too. Cast as Consecration is, where you stand; the spell list doesn't
 		-- show it, so its first tick places it, a quarter second after it fell.
 		id = "free_consecration", name = "Free Consecration", shape = "ground", freeFall = "consecration", atFeet = true,
+		follows = "set/uncommon/paladin",
 		desc = "With Hallowed Ground or Divine Intervention, a free Consecration hallows the ground beneath you: where it burns (shown with its first tick).",
 		on = { spells = { 26573 }, names = { "consecration" } }, range = 0,
 		tipNames = { "Consecration" }, sizePattern = "within ([%d%.]+) yd of that spot", durationPattern = "of that spot.-for ([%d%.]+) sec",
@@ -121,6 +123,12 @@ AST_Register("paladin", {
 		tipNames = { "Exorcism", "Hammer of Wrath", "Holy Shock", "Judgement" },
 		sizePattern = "within ([%d%.]+) yd", base = 25, unscaled = true,
 		defaults = { enabled = false, mode = "always", line = { 0.96, 0.55, 0.73, 0.6 }, fill = { 0.96, 0.55, 0.73, 0 } },
+	},
+	{
+		-- How far your auto-attack swings reach: 6 yd, centre to centre (nothing changes it).
+		id = "paladin_melee", name = "Melee range", shape = "circle", radius = 6, sizeLabel = "swing reach",
+		desc = "How far your melee swings reach for an enemy.",
+		defaults = { enabled = false, mode = "always", line = { 1, 0.45, 0.3, 0.6 }, fill = { 1, 0.45, 0.3, 0 } },
 	},
 }, {
 	icon = "Interface\\Icons\\Spell_Holy_HolyBolt",

@@ -16,7 +16,7 @@ AST_Register("hunter", {
 	{
 		-- "Lands on the thickest group of enemies within 28 yd: every enemy within 8 yd of that spot
 		-- takes ... every 1 sec for 8.4 sec".
-		id = "volley", name = "Volley", shape = "ground", spellKey = "volley",
+		id = "volley", name = "Volley", shape = "ground", spellKey = "volley", follows = "set/epic/hunter",
 		desc = "Where Volley lands: the arrows fill in from its centre until they stop.",
 		on = { spells = { 1510 }, names = { "volley" } }, range = 28,
 		tipNames = { "Volley" }, sizePattern = "within ([%d%.]+) yd of that spot", durationPattern = "of that spot.-for ([%d%.]+) sec",

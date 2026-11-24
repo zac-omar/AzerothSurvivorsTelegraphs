@@ -24,7 +24,8 @@
 --     telling its size; it lasts `duration`, or what its tooltip's durationPattern reads, and
 --     ticks every `every` sec, the first `firstTick` sec after it lands; atFeet: set where you
 --     stand, a trap, `offset` yd ahead of where you face; freeFall: one that falls without a
---     cast of the spell it is, that telegraph's id: placed by its first tick) or
+--     cast of the spell it is, that telegraph's id: placed by its first tick; follows: the key
+--     (an armor set's) that makes its spots move with you) or
 --     "downed" (around downed teammates);
 --   modes: { "cast", "cooldown" } when it can show either way;
 --   spellKey: its key in AZS_SPELLS (its cooldown and casts);
@@ -113,6 +114,7 @@ local COMMON = {
 	size = 5, spacing = 9, fillSpacing = 12, fillStyle = "solid",          -- Dots
 	length = 0, radius = 8,
 	most = 0,                                                              -- enemy effects: 0 = no cap
+	cdFill = true, durFill = true, uptime = true,                          -- the time it shows
 };
 
 -- The two kinds of piece every shape is made of, white, tinted to its colours (SetPiece).
@@ -897,7 +899,7 @@ local function DrawSpot(cu, cv, R, st, alpha, grow)
 		return;
 	end
 	PN = 0;
-	if ( AddArc(cu, cv, R, 0, 2 * PI) ) then
+	if ( grow < 1 and AddArc(cu, cv, R, 0, 2 * PI) ) then
 		FillPoly(st.fill, alpha * 0.35, st.strip);
 	end
 	PN = 0;
@@ -1937,6 +1939,54 @@ fx.Mean = function(list)
 	return n > 0 and sum / n or nil;
 end
 
+-- A ground spell that moves with you (a set's Consecration): a ring on you, as the rings around
+-- you are, `p` filling it from the centre as its time runs and a shockwave on each cast. While
+-- each lasts until the next (running), the ring is full and gently breathes, and two small comets
+-- (a bright head, a fading tail) slowly circle its edge.
+fx.Aura = function(R, st, alpha, p, since, running, now)
+	if ( not running ) then
+		DrawCircleAt(0, 0, R, st, alpha, p, since);
+		return;
+	end
+	local breath = 0.8 + 0.2 * math.sin(now * 2 * PI / 3);
+	local turn, tail, n = -now * 2 * PI / 8, 70 * PI / 180, 7;
+	local bright = Bright(st.line);
+	if ( st.style == "dots" ) then
+		DotArc(0, 0, R, 0, 2 * PI, st.line, alpha, st.size, st.spacing);
+		if ( st.fill[4] > 0 ) then
+			DotFill(0, 0, R, 0, 2 * PI, st, alpha * 0.5 * breath);
+		end
+	else
+		PN = 0;
+		if ( AddArc(0, 0, R, 0, 2 * PI) ) then
+			FillPoly(st.fill, alpha * breath, st.strip);
+		end
+		PN = 0;
+		if ( AddArc(0, 0, R, 0, 2 * PI) ) then
+			Outline(true, st, alpha, 1);
+		end
+	end
+	-- the comets: head first (it turns toward lower angles), each piece of the tail fainter
+	for i = 0, 1 do
+		local head = turn + i * PI;
+		for k = 1, n do
+			local a0, a1, f = head + tail * (k - 1) / n, head + tail * k / n, 1 - (k - 1) / n;
+			if ( st.style == "dots" ) then
+				DotArc(0, 0, R, a0, a1, bright, alpha * f, st.size * (1 + 0.6 * f), st.spacing);
+			else
+				PN = 0;
+				if ( AddArc(0, 0, R, a0, a1) ) then
+					Stroke(false, bright, alpha * 0.3 * f, st.width * 4);
+				end
+				PN = 0;
+				if ( AddArc(0, 0, R, a0, a1) ) then
+					Stroke(false, bright, alpha * f, st.width * (1 + f));
+				end
+			end
+		end
+	end
+end
+
 -- Where the enemies stood a moment ago, while you have a spell that lands on a spot: every frame
 -- while a cast or a first tick is due (`close`), else every 0.1 sec once a cast could come. The
 -- latest 48: every frame of the last 0.2 sec, one every 0.1 sec before. The oldest first; their
@@ -2846,12 +2896,18 @@ end
 -- lands. A Test press shows one near the hero.
 local function DrawSpots(j, p, now)
 	local def, st = j.def, j.st;
+	-- with its duration fill turned off, each spot is drawn whole for as long as it lasts
 	if ( j.test ) then
-		DrawSpot(6, 3, j.size, st, j.alpha, math.min(1, j.test / 3));
+		DrawSpot(6, 3, j.size, st, j.alpha, st.durFill and math.min(1, j.test / 3) or 1);
 		return;
 	end
 	local c = SpellOf(def);
 	local range, every, first = def.range or 30, def.every or 1, def.firstTick or FIRST_TICK;
+	-- a set that makes the spell move with you (Consecration with the Uncommon paladin set, Volley
+	-- with the Epic hunter set, Blizzard with the Epic mage set): its spots stay on you, so one cast
+	-- on a group comes to you at once
+	local follows = def.follows and owned.keys[def.follows];
+	local newest;
 	if ( def.freeFall or def.atFeet ) then
 		-- one that falls on its own (Rain of Chaos): its first tick places it afterwards, from where
 		-- the enemies stood a moment before, so those are kept all along; one set at your feet: where
@@ -2897,10 +2953,10 @@ local function DrawSpots(j, p, now)
 		Remember(p, now, range + j.size, true);
 		local q = Blend(at) or fx.past[table.getn(fx.past)];
 		local x, y, cands, most, best, z;
-		if ( def.atFeet ) then
-			-- set where you stood (a trap), or `offset` yd ahead of where you face (a totem): the one
-			-- spot it can be, so it stays there as it is, its size the tooltip's; at the height you
-			-- stood at
+		if ( def.atFeet or follows ) then
+			-- set where you stood (a trap, or one that moves with you), or `offset` yd ahead of where you
+			-- face (a totem): the one spot it can be, so it stays there as it is, its size the
+			-- tooltip's; at the height you stood at
 			x, y, z, most = q.px, q.py, q.pz, 0;
 			if ( def.offset ) then
 				local f = (db.mirror and -(p.facing or 0) or (p.facing or 0)) + (db.rotate or 0) * PI / 180;
@@ -2939,7 +2995,7 @@ local function DrawSpots(j, p, now)
 			end
 			s.x, s.y, s.z, s.at, s.cands, s.tip, s.r = x, y, z, at, cands, j.tip, j.size;
 			s.every, s.tickAt, s.tickN, s.ids, s.lag = every, at + first, 0, {}, base - at;
-			if ( j.tip and not def.atFeet ) then
+			if ( j.tip and not ( def.atFeet or follows ) ) then
 				-- with which of the radii its tooltip allows each enemy would have been the spot
 				PickRanges(q, cands, TipRange(j.tip));
 			end
@@ -2966,7 +3022,7 @@ local function DrawSpots(j, p, now)
 					end
 				end
 			end
-			if ( not mixed and s.tip and not def.atFeet ) then
+			if ( not mixed and s.tip and not ( def.atFeet or follows ) ) then
 				Learn(s, def, s.tickq, s.ids);
 			end
 			if ( s.firstAt and not mixed ) then
@@ -2994,11 +3050,28 @@ local function DrawSpots(j, p, now)
 			if ( age > s.dur ) then
 				fade = 1 - (age - s.dur) / 0.4;
 			end
-			-- at its own height, not yours: it stays on the ground where it is
-			H.dz = s.z and s.z - p.z or 0;
-			DrawSpot(s.x - p.x, s.y - p.y, s.r or j.size, st, j.alpha * fade, math.min(1, age / s.dur));
-			H.dz = 0;
+			if ( follows ) then
+				-- one that moves with you is on you: the newest is drawn below, as a ring around you
+				s.x, s.y, s.fade = p.x, p.y, fade;
+				if ( not newest or s.at > newest.at ) then
+					newest = s;
+				end
+			else
+				-- at its own height, not yours: it stays on the ground where it is
+				H.dz = s.z and s.z - p.z or 0;
+				DrawSpot(s.x - p.x, s.y - p.y, s.r or j.size, st, j.alpha * fade, st.durFill and math.min(1, age / s.dur) or 1);
+				H.dz = 0;
+			end
 		end
+	end
+	if ( newest ) then
+		-- running: each lasts as long as the spell's cooldown or longer, so the next comes before it
+		-- ends; unless the spell waits (Consecration, for enemies to come near): half a second past
+		-- due, its time shows running out
+		local age, cd = now - newest.at, c and c.max;
+		local running = st.uptime and cd and cd > 0 and newest.dur >= cd and age < cd + 0.5;
+		fx.Aura(newest.r or j.size, st, j.alpha * newest.fade, st.durFill and math.min(1, age / newest.dur) or nil,
+			age, running, now);
 	end
 end
 
@@ -3061,9 +3134,9 @@ local function CollectJobs(now, inRun)
 				job.show = true;
 				job.alpha = math.min(1, (preview[def.id] - real) / 0.5);
 				if ( st.mode == "cooldown" ) then
-					-- two cooldowns of 1.5 seconds
+					-- two cooldowns of 1.5 seconds (with its fill turned off, two casts)
 					local cycle = t - math.floor(t / 1.5) * 1.5;
-					job.progress = cycle / 1.5;
+					job.progress = st.cdFill and cycle / 1.5 or nil;
 					job.since = cycle;
 				elseif ( def.shape == "enemy" or def.shape == "ground" ) then
 					job.test = t;
@@ -3108,9 +3181,12 @@ local function CollectJobs(now, inRun)
 				end
 			elseif ( st.mode == "cooldown" ) then
 				if ( c and c.max ) then
-					job.progress = 1 - c.left / c.max;
-					if ( job.since and job.since < 0.25 ) then
-						job.progress = 0;
+					-- with its fill turned off, a plain ring (a cast still sends out its shockwave)
+					if ( st.cdFill ) then
+						job.progress = 1 - c.left / c.max;
+						if ( job.since and job.since < 0.25 ) then
+							job.progress = 0;
+						end
 					end
 					job.show = inRun;
 				end
@@ -3556,6 +3632,10 @@ loader:SetScript("OnEvent", function()
 	end
 	db = ASTelegraphsDB;
 	db.t = db.t or {};
+	-- your own rings (Rings.lua) into their pages, before the telegraphs are set up
+	if ( AST.LoadRings ) then
+		AST.LoadRings();
+	end
 	-- The telegraphs are set up on the first frame (or the first /ast), once your class is known
 	-- and every addon has loaded: Priest Telegraphs loads after this one.
 	Start();

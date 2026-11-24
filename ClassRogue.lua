@@ -83,6 +83,12 @@ AST_Register("rogue", {
 		sizePattern = "within ([%d%.]+) yd", base = 8, unscaled = true,
 		defaults = { enabled = false, mode = "always", line = { 1, 0.96, 0.41, 0.6 }, fill = { 1, 0.96, 0.41, 0 } },
 	},
+	{
+		-- How far your auto-attack swings reach: 8 yd, centre to centre (nothing changes it).
+		id = "rogue_melee", name = "Melee range", shape = "circle", radius = 8, sizeLabel = "swing reach",
+		desc = "How far your melee swings reach for an enemy.",
+		defaults = { enabled = false, mode = "always", line = { 1, 0.45, 0.3, 0.6 }, fill = { 1, 0.45, 0.3, 0 } },
+	},
 }, {
 	icon = "Interface\\Icons\\INV_ThrowingKnife_04",
 	gear = {

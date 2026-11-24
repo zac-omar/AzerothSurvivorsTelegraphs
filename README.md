@@ -36,13 +36,14 @@ If you also run Priest Telegraphs, this addon leaves the telegraphs that both ad
 | **Reaper's Amulet: Execute** | With The Reaper's Amulet on Execute: around each Execute hit's target | 6 yd |
 | **Pendant of the Plague** | With it on Rend: where an enemy dies with your Rend on it | 7 yd |
 | **Strike reach** | Always (off by default) | How far your strikes reach, from their tooltips |
+| **Melee range** | Always (off by default) | How far your melee swings reach for an enemy: 6 yd, centre to centre |
 
 ### Paladin
 
 | Telegraph | When it shows | Size |
 |---|---|---|
 | **Holy Wrath** | Briefly on each cast (or always, filling from the centre with its cooldown) | Read from its tooltip |
-| **Consecration** | On the ground where you stood when it went down, for as long as it lasts | Read from its tooltip |
+| **Consecration** | On the ground where you stood when it went down, for as long as it lasts (with the Uncommon armor set's 8 pieces: a ring locked around you, see [Armor sets](#armor-sets)) | Read from its tooltip |
 | **Free Consecration** *(experimental)* | With Hallowed Ground or Divine Intervention: where their free Consecration burns | Read from Consecration's tooltip |
 | **Redemption** | With Redemption: on the body of an enemy that bursts in holy light | Read from its tooltip (8 yd × your Area, more with its Charm of the Fated Hour) |
 | **Light's Grace** | With Light's Grace: fills toward the free Holy Wrath every 14 sec (or just flashes when it does) | Your Holy Wrath's size |
@@ -52,6 +53,7 @@ If you also run Priest Telegraphs, this addon leaves the telegraphs that both ad
 | **Epic set: Judgement kills** | With the Epic armor set's 8 pieces: where an enemy Judgement kills explodes | 8 yd |
 | **T0.5 set: Hammer of Justice** | With the T0.5 armor set's 8 pieces: around each Hammer of Justice's target | 10 yd |
 | **Spell range** | Always (off by default) | How far your targeted spells look for enemies, from their tooltips |
+| **Melee range** | Always (off by default) | How far your melee swings reach for an enemy: 6 yd, centre to centre |
 
 ### Hunter
 
@@ -79,6 +81,7 @@ If you also run Priest Telegraphs, this addon leaves the telegraphs that both ad
 | **Uncommon set: Rupture bursts** | With the Uncommon armor set's 8 pieces: where an enemy dying with your Rupture on it bursts | 8 yd |
 | **Reaper's Amulet: Eviscerate / Backstab** | With The Reaper's Amulet on that strike: around each hit's target | 6 yd |
 | **Strike reach** | Always (off by default) | How far your strikes reach, from their tooltips |
+| **Melee range** | Always (off by default) | How far your melee swings reach for an enemy: 8 yd, centre to centre |
 
 ### Priest
 
@@ -169,7 +172,7 @@ An armor set's 8-piece bonus (all eight pieces of one set at 3 stars or more) is
 
 The explosions (Judgement, Rupture, Flame Shock) show on the body as they go off. Starfire's bursts and the Power Word: Shield explosion show from the first one when your armor shows the set. The T0.5 bonuses (Hammer of Justice, Thunderburst) show from their second one on, once the first has shown you have the set. Bonuses that make a spell wider or longer are in its tooltip, so its telegraph already has them.
 
-A ground ring stays where its spell was put, even with the 8-piece bonus that makes Consecration (Uncommon paladin set), Volley (Epic hunter set) or Blizzard (Epic mage set) move with you: that bonus has no hits of its own to tell it by.
+With the 8-piece bonus that makes a ground spell move with you (Consecration with the Uncommon paladin set, Volley with the Epic hunter set, Blizzard with the Epic mage set), it becomes a ring locked around you, like your other rings: it fills in from the centre as the spell's time runs, with a shockwave on each cast. A Volley or Blizzard cast on a group comes straight to you. When each one lasts as long as the spell's cooldown or longer, so the next always arrives before it ends, the ring stays full and gently breathes, and two small comets of light circle its edge to show it's up for good. If the next one is late (Consecration waits for enemies to come near), the fill comes back so you can see the time running out.
 
 Not shown: the T0.5 sets' 4-piece bonuses that change a size (Splitting Ice 7 yd, Conflagrate 8 yd, Tranquility 15 yd), since they have no hits of their own to tell them by, and the druid T0.5 Seed of Life.
 
@@ -183,6 +186,7 @@ Not shown: the T0.5 sets' 4-piece bonuses that change a size (Splitting Ice 7 yd
 | **Escape Artist** | Gnome: flashes when Escape Artist goes off, rooting everything inside for 2 sec (or fills toward the next one) | Its tooltip (8 yd at base, grows with your Area) |
 | **Revive range** | In co-op, around each downed teammate; fills as you bring them back. Stand inside it to revive (6 sec, 9 at Heroic 5+; faster with more friends) | 5 yd |
 | **Custom ring** | A ring of any size around you (off by default; `/ast ring 10` sets it to 10 yd) | Your setting |
+| **Custom ring 2, 3, ...** | As many more as you like: **Add a ring** under the list. Any class rings show for every hero; a class page has its own, shown while you play that class | Your setting |
 
 Telegraphs stand still while the game does: while you choose an upgrade or a chest's prize, and on the pause screen. Nothing fills or runs out meanwhile, and they carry on when you're back. A **Test** press still plays.
 
@@ -206,6 +210,8 @@ The options window has a tab for each page down its left side:
 - **One tab per class**, yours first and marked "you". The window always opens on yours. You can set up another class's telegraphs before you play it.
 - **Any class**, below the classes: the telegraphs any hero can use (amulets, racials, co-op revives, the custom ring).
 
+**Add a ring** at the bottom of a page's list makes a new ring of your own on that page, each in its own colour, as many as you like: for example a few static rings of different sizes around you. Rings on Any class show for every hero; rings on a class page show while you play that class. Set each one's **Radius** (type it in if you like) and colours, and **Remove ring** takes it away again.
+
 A class page lists its telegraphs under **Spells**, **Talents**, **Amulets** and **Sets** (armor set bonuses), and the experimental ones (off by default) under **Experimental**. The Any class page has **Amulets**, **Racial** and **Other**. The dot beside each one turns it on or off, and its colour says where it stands:
 
 - **Green**: on, and your hero has it now (the spell this run, the talent, the amulet or the set).
@@ -215,8 +221,9 @@ A class page lists its telegraphs under **Spells**, **Talents**, **Amulets** and
 Click a telegraph to see what it shows, its size right now, whether your hero has it, and its settings:
 
 - **When**: briefly on cast, or always with a cooldown fill.
+- **Cooldown fill**, **Duration fill** and **Uptime look**, each on its own: untick one to drop that time from the telegraph. Without the cooldown fill an always-on ring stays plain (a cast still sends out its shockwave). Without the duration fill a ground spot is drawn whole for as long as it lasts. Without the uptime look a ring that moves with you shows its time running out instead of its comets.
 - **Flash length**, and **Most at once** for the enemy effects: a limit on how many rings are drawn when a pack dies together. Off by default; set it if your frame rate drops.
-- **Size override**, if you'd rather set a size yourself.
+- **Size override** (or **Radius**, for the custom ring), if you'd rather set a size yourself: step it with - and + (Shift for bigger steps, or the mouse wheel), or click the number and type any size up to 100 yd, such as 27.5. It takes effect as you type; Enter or a click elsewhere keeps it, Escape puts the old one back. A size override of 0 goes back to the automatic size.
 - **Style**: *Smooth* (solid fills and outlines with a glow) or *Dots*, with their own options.
 - **Colours and opacity** for the outline and the fill, with presets or a colour picker.
 - **Test** shows the telegraph for 3 seconds so you can see your changes. **Reset to defaults** puts that telegraph back as it came.
@@ -232,6 +239,7 @@ Click **Import / Export** at the top of the options window, or type `/ast share`
 - **Export every class**, or **Export** the page you're on (a class, or Any class), puts your setup in the box as one line of text, already selected. Press **Ctrl+C** and share it.
 - To use someone else's line, paste it into the box with **Ctrl+V**. Before anything changes, the box says what the line holds (how many telegraphs, which classes). **Import** applies it.
 - A line changes only the telegraphs it holds, each set exactly as the person who exported it had it. So you can take one person's Paladin setup and someone else's Mage setup, or grab one line that sets every class at once.
+- Your own rings travel too. A line with a page's rings replaces your rings on that page with them, so importing the same line twice doesn't double them.
 - A line from another version of the addon still imports. Telegraphs that version doesn't have are left out, and the box says how many.
 - Only the telegraphs' settings are shared: on or off, when they show, size, style and colours. Your window, minimap button and cone direction stay your own.
 

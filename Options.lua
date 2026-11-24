@@ -85,6 +85,14 @@ local function ClassColor(class)
 	return CLASS_COLORS[class] or { 1, 0.82, 0 };
 end
 
+-- A telegraph's name as the window shows it: your own rings by their number.
+local function Named(def)
+	if ( def.custom ) then
+		return string.format(L("Custom ring %d"), def.custom);
+	end
+	return L(def.name);
+end
+
 -- Which list heading a telegraph goes under: an experimental one under its own, last.
 local function Kind(def)
 	if ( def.experimental ) then
@@ -109,6 +117,10 @@ end
 
 local function Skipped(def)
 	local _, _, _, skipped = AST.State();
+	if ( def.custom ) then
+		-- your own rings are this addon's only (Priest Telegraphs has the first one)
+		return false;
+	end
 	for i = 1, table.getn(skipped) do
 		if ( skipped[i] == def.name ) then
 			return true;
@@ -358,17 +370,107 @@ local function Choice(panel, label, when, choices, get, set)
 	return row;
 end
 
--- A number with - and + (shift: five steps), the mouse wheel over the row too.
-local function Stepper(panel, label, when, get, set, step, lo, hi, fmt)
+-- A number with - and + (shift: five steps), the mouse wheel over the row too. `typed`: a click on
+-- the number opens a box to type it in, any value from lo to hi (it takes effect as you type; Enter
+-- or a click away keeps it, Escape puts the old one back).
+local function Stepper(panel, label, when, get, set, step, lo, hi, fmt, typed)
 	local row = Row(panel, label, when);
 	local value = Label(row, "");
+	local box;
 	local function Nudge(n)
+		if ( box and box.open ) then
+			box.Close();
+		end
 		if ( IsShiftKeyDown and IsShiftKeyDown() ) then
 			n = n * 5;
 		end
 		local v = math.floor((get() + n * step) / step + 0.5) * step;
 		set(math.max(lo, math.min(hi, v)));
 		Refresh();
+	end
+	if ( typed ) then
+		box = CreateFrame("EditBox", nil, row);
+		box:SetAutoFocus(false);
+		box:SetMaxLetters(10);
+		box:SetFontObject(GameFontHighlightSmall);
+		box:SetWidth(100);
+		box:SetHeight(18);
+		box:SetPoint("LEFT", row, "LEFT", CX + 26, 0);
+		box:SetBackdrop(FLAT);
+		box:SetBackdropColor(0.05, 0.05, 0.08, 0.95);
+		box:SetBackdropBorderColor(0.75, 0.55, 1, 1);
+		if ( box.SetTextInsets ) then
+			box:SetTextInsets(5, 5, 0, 0);
+		end
+		box:Hide();
+		-- what is typed: its first number ("27.5", "27,5" and "27.5 yd" all are 27.5), or nil
+		local function Typed()
+			local text = string.gsub(box:GetText() or "", ",", ".");
+			local _, _, n = string.find(text, "([0-9]*%.?[0-9]+)");
+			n = tonumber(n);
+			return n and math.max(lo, math.min(hi, math.floor(n * 100 + 0.5) / 100));
+		end
+		-- closes the box; `put` puts that value back (Escape). Only while the telegraph it was opened
+		-- for is still the one selected: a click on another doesn't give that one this number.
+		-- `quiet`: the window is closing, nothing to redraw.
+		box.Close = function(put, quiet)
+			if ( not box.open ) then
+				return;
+			end
+			box.open = false;
+			if ( put and selected == box.owner ) then
+				set(put);
+			end
+			box:ClearFocus();
+			box:Hide();
+			value:Show();
+			if ( not quiet ) then
+				Refresh();
+			end
+		end
+		box:SetScript("OnTextChanged", function()
+			local n = box.open and selected == box.owner and Typed();
+			if ( n ) then
+				set(n);
+				Refresh();
+			end
+		end);
+		box:SetScript("OnEnterPressed", function() box.Close(); end);
+		box:SetScript("OnEditFocusLost", function() box.Close(); end);
+		box:SetScript("OnEscapePressed", function() box.Close(box.before); end);
+		-- the window (or this row) closing keeps what was typed
+		row:SetScript("OnHide", function() box.Close(nil, true); end);
+		-- the number itself is the button that opens it
+		local hit = CreateFrame("Button", nil, row);
+		hit:SetWidth(104);
+		hit:SetHeight(18);
+		hit:SetPoint("LEFT", row, "LEFT", CX + 24, 0);
+		hit:SetScript("OnEnter", function()
+			value:SetTextColor(0.85, 0.7, 1);
+			GameTooltip:SetOwner(hit, "ANCHOR_RIGHT");
+			GameTooltip:SetText(L("Click to type a number"), 1, 1, 1);
+			GameTooltip:Show();
+		end);
+		hit:SetScript("OnLeave", function()
+			value:SetTextColor(1, 1, 1);
+			GameTooltip:Hide();
+		end);
+		hit:SetScript("OnClick", function()
+			box.owner, box.before = selected, get();
+			-- the box opens holding the number alone, ready to be typed over
+			box:SetText(string.format("%g", box.before));
+			box.open = true;
+			value:Hide();
+			box:Show();
+			box:SetFocus();
+			box:HighlightText();
+		end);
+		-- another telegraph picked: it closes (this runs in a Refresh already, before the number's own)
+		table.insert(panel.refreshers, function()
+			if ( box.open and selected ~= box.owner ) then
+				box.Close(nil, true);
+			end
+		end);
 	end
 	local minus = Button(row, "-", 20, 18, function() Nudge(-1); end);
 	minus:SetPoint("LEFT", row, "LEFT", CX, 0);
@@ -665,7 +767,7 @@ local function LayoutList()
 	local total = 0;
 	for i = 1, table.getn(ui.items) do
 		local item = ui.items[i];
-		if ( y <= 0 and y - item.height >= -(BODY_H - 6) ) then
+		if ( y <= 0 and y - item.height >= -(BODY_H - 34) ) then
 			item:ClearAllPoints();
 			item:SetPoint("TOPLEFT", ui.list, "TOPLEFT", 8, y);
 			item:Show();
@@ -697,7 +799,7 @@ local function Populate()
 				nE = nE + 1;
 				ui.entries[nE] = ui.entries[nE] or Entry();
 				ui.entries[nE].def = defs[i];
-				ui.entries[nE].text:SetText(L(defs[i].name));
+				ui.entries[nE].text:SetText(Named(defs[i]));
 				table.insert(ui.items, ui.entries[nE]);
 			end
 		end
@@ -719,10 +821,19 @@ local function BuildList()
 	ui.list:SetPoint("TOPLEFT", win, "TOPLEFT", NAV_W + 18, -TOP);
 	ui.list:SetPoint("BOTTOMLEFT", win, "BOTTOMLEFT", NAV_W + 18, 10);
 	ui.entries, ui.heads, ui.items, ui.offset = {}, {}, {}, 0;
+	-- a ring of your own on this page, as many as you like
+	ui.addRing = Button(ui.list, "Add a ring", LIST_W - 16, 22, function()
+		local def = AST.AddRing(page);
+		if ( def ) then
+			AST.State().ui.sel[page] = def.id;
+			ShowPage(page);
+		end
+	end);
+	ui.addRing:SetPoint("BOTTOM", ui.list, "BOTTOM", 0, 8);
 	-- a long list scrolls with the mouse wheel
 	ui.list:EnableMouseWheel(true);
 	ui.list:SetScript("OnMouseWheel", function()
-		local most = math.max(0, (ui.listH or 0) - (BODY_H - 12));
+		local most = math.max(0, (ui.listH or 0) - (BODY_H - 40));
 		ui.offset = math.max(0, math.min(most, ui.offset - (arg1 or 0) * 22));
 		LayoutList();
 	end);
@@ -858,12 +969,21 @@ local function SettingRows(panel)
 		function() return S().most; end, function(v) S().most = v; end, 1, 0, 40,
 		function(v) return v <= 0 and L("no limit") or string.format(L("%d rings"), v); end);
 
+	-- the time it shows, each on its own: a cooldown filling in, a spot's time running out, and a ring
+	-- that moves with you up for good
+	Check(panel, "Cooldown fill", function(d) return ( d.shape == "circle" or d.shape == "cone" ) and S().mode == "cooldown"; end,
+		function() return S().cdFill; end, function(v) S().cdFill = v; end, "Fills as the cooldown runs");
+	Check(panel, "Duration fill", function(d) return d.shape == "ground"; end,
+		function() return S().durFill; end, function(v) S().durFill = v; end, "Fills as its time runs out");
+	Check(panel, "Uptime look", function(d) return d.follows ~= nil; end,
+		function() return S().uptime; end, function(v) S().uptime = v; end, "Comets while it never runs out");
+
 	Section(panel, "Size");
 	Stepper(panel, "Size override", Sized,
 		function() return S().length; end, function(v) S().length = v; end, 0.5, 0, 100,
-		function(v) return v <= 0 and L("off (automatic)") or Yd(v); end);
+		function(v) return v <= 0 and L("off (automatic)") or Yd(v); end, true);
 	Stepper(panel, "Radius", function(d) return not Sized(d); end,
-		function() return S().radius; end, function(v) S().radius = v; end, 0.5, 0.5, 100, Yd);
+		function() return S().radius; end, function(v) S().radius = v; end, 0.5, 0.5, 100, Yd, true);
 
 	Section(panel, "Appearance");
 	Choice(panel, "Style", nil, { { "smooth", "Smooth", 80 }, { "dots", "Dots", 60 } },
@@ -923,7 +1043,7 @@ local function BuildPanel()
 	ui.status2:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -78);
 	table.insert(panel.refreshers, function()
 		local s = AST.Settings(selected);
-		ui.name:SetText(L(selected.name));
+		ui.name:SetText(Named(selected));
 		ui.desc:SetText(Describe(selected));
 		ui.onoff.text:SetText(s.enabled and L("On") or L("Off"));
 		if ( s.enabled ) then
@@ -972,6 +1092,23 @@ local function BuildPanel()
 	local hint = Label(panel, "Test shows it for 3 seconds.");
 	hint:SetTextColor(0.5, 0.5, 0.55);
 	hint:SetPoint("LEFT", reset, "RIGHT", 10, 0);
+	-- one of your own rings: it can go (in the hint's place)
+	local remove = Button(panel, "Remove ring", 100, 22, function()
+		if ( selected and selected.custom ) then
+			AST.RemoveRing(selected);
+			ShowPage(page);
+		end
+	end);
+	remove:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -12, 10);
+	table.insert(panel.refreshers, function()
+		if ( selected.custom ) then
+			remove:Show();
+			hint:Hide();
+		else
+			remove:Hide();
+			hint:Show();
+		end
+	end);
 end
 
 ---------------------------------------------------------------------------------------------

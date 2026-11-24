@@ -13,9 +13,10 @@ local ORDER = { "common", "warrior", "paladin", "hunter", "rogue", "priest", "sh
 -- The settings a line can carry, in the order a line has them, and what each may be: a number
 -- within the options window's own limits, one of a few words, a colour, on or off.
 local KEYS = { "enabled", "mode", "style", "flash", "most", "length", "radius", "line", "fill", "width", "glow",
-	"strip", "size", "spacing", "fillStyle", "fillSpacing" };
+	"strip", "size", "spacing", "fillStyle", "fillSpacing", "cdFill", "durFill", "uptime" };
 local SPEC = {
 	enabled = { "bool" }, glow = { "bool" }, mode = { "mode" },
+	cdFill = { "bool" }, durFill = { "bool" }, uptime = { "bool" },
 	style = { "word", smooth = true, dots = true }, fillStyle = { "word", solid = true, front = true },
 	line = { "color" }, fill = { "color" },
 	flash = { "num", 0.1, 5 }, most = { "num", 0, 40 }, length = { "num", 0, 100 }, radius = { "num", 0.5, 100 },
@@ -106,7 +107,8 @@ function AST.Export(scope)
 			for k = 1, table.getn(KEYS) do
 				local key = KEYS[k];
 				local v = Encode(key, s[key]);
-				if ( v ~= Encode(key, Default(def, key)) ) then
+				-- your own rings with their colours always: a new one elsewhere starts from other ones
+				if ( ( def.custom and ( key == "line" or key == "fill" ) ) or v ~= Encode(key, Default(def, key)) ) then
 					table.insert(fields, key .. "=" .. v);
 				end
 			end
@@ -134,19 +136,23 @@ function AST.Import(text, apply)
 			byId[r.defs[i].id] = r.defs[i];
 		end
 	end
-	local entries, seen, pos = {}, 0, 1;
+	local entries, seen, pos, page = {}, 0, 1, nil;
 	while ( true ) do
 		local s, e, mark, rest = string.find(body, "([#;])([^#;]*)", pos);
 		if ( not s ) then
 			break;
 		end
 		pos = e + 1;
-		if ( mark == ";" ) then
+		if ( mark == "#" ) then
+			page = rest;
+		else
 			seen = seen + 1;
 			local _, _, id, fields = string.find(rest, "^([%w_]+):?(.*)$");
 			local def = id and byId[id];
-			if ( def ) then
-				local entry = { def = def, values = {} };
+			-- someone's own ring: one of this page's rings (made anew when it is imported)
+			local ring = id and AST.IsRingId(id) and page and AST.registry[page] and page;
+			if ( def or ring ) then
+				local entry = { def = not ring and def, ring = ring, values = {} };
 				local fpos = 1;
 				while ( true ) do
 					local fs, fe, k, v = string.find(fields, "([%w]+)=([^,]*)", fpos);
@@ -154,13 +160,13 @@ function AST.Import(text, apply)
 						break;
 					end
 					fpos = fe + 1;
-					local value = SPEC[k] and Decode(def, k, v);
+					local value = SPEC[k] and Decode(def or {}, k, v);
 					if ( value ~= nil ) then
 						entry.values[k] = value;
 					end
 				end
 				table.insert(entries, entry);
-				res.pages[def.group] = (res.pages[def.group] or 0) + 1;
+				res.pages[ring or def.group] = (res.pages[ring or def.group] or 0) + 1;
 			else
 				res.unknown = res.unknown + 1;
 			end
@@ -173,6 +179,25 @@ function AST.Import(text, apply)
 	end
 	res.count = table.getn(entries);
 	if ( apply ) then
+		-- a page whose rings the line has: yours there make way for them
+		local cleared = {};
+		for i = 1, table.getn(entries) do
+			local p = entries[i].ring;
+			if ( p and not cleared[p] ) then
+				cleared[p] = true;
+				local defs = AST.registry[p].defs;
+				for j = table.getn(defs), 1, -1 do
+					if ( defs[j].custom ) then
+						AST.RemoveRing(defs[j]);
+					end
+				end
+			end
+		end
+		for i = 1, table.getn(entries) do
+			if ( entries[i].ring ) then
+				entries[i].def = AST.AddRing(entries[i].ring);
+			end
+		end
 		for i = 1, table.getn(entries) do
 			local s = AST.ResetSettings(entries[i].def);
 			for k, v in pairs(entries[i].values) do

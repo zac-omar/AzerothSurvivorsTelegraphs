@@ -41,7 +41,7 @@ AST_Register("mage", {
 	{
 		-- "Lands on the thickest group of enemies within 30 yd: every enemy within 9 yd of that spot
 		-- takes ... every 1 sec for 9.8 sec".
-		id = "blizzard", name = "Blizzard", shape = "ground", spellKey = "blizzard",
+		id = "blizzard", name = "Blizzard", shape = "ground", spellKey = "blizzard", follows = "set/epic/mage",
 		desc = "Where Blizzard lands: the storm fills in from its centre until it ends.",
 		on = { spells = { 10 }, names = { "blizzard" } }, range = 30,
 		tipNames = { "Blizzard" }, sizePattern = "within ([%d%.]+) yd of that spot", durationPattern = "of that spot.-for ([%d%.]+) sec",

@@ -105,6 +105,12 @@ AST_Register("warrior", {
 		sizePattern = "within ([%d%.]+) yd", base = 7, unscaled = true,
 		defaults = { enabled = false, mode = "always", line = { 0.85, 0.75, 0.6, 0.6 }, fill = { 0.85, 0.75, 0.6, 0 } },
 	},
+	{
+		-- How far your auto-attack swings reach: 6 yd, centre to centre (nothing changes it).
+		id = "warrior_melee", name = "Melee range", shape = "circle", radius = 6, sizeLabel = "swing reach",
+		desc = "How far your melee swings reach for an enemy.",
+		defaults = { enabled = false, mode = "always", line = { 1, 0.45, 0.3, 0.6 }, fill = { 1, 0.45, 0.3, 0 } },
+	},
 }, {
 	icon = "Interface\\Icons\\INV_Sword_27",
 	gear = {
