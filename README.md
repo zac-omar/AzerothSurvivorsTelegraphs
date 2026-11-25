@@ -213,15 +213,29 @@ Not shown: the T0.5 sets' 4-piece bonuses that change a size (Splitting Ice 7 yd
 | **Custom ring 2, 3, ...** | As many more as you like: **Add a ring** under the list. Any class rings show for every hero; a class page has its own, shown while you play that class | Your setting |
 | **Guardian wake range** | Around each guardian asleep at its lair: come this near (or hit it) and it wakes. It warms to red as you close in | 20 yd |
 | **Guardian leash** | Around the lair of a guardian that's chasing you: past this ring it gives up, walks home and heals to full. It warms to red as you near it, with a line under your hero ("gives up in 8 yd") | 97.5 yd from its lair |
-| **Minimap pins** | On the minimap: guardians (white asleep, red when chasing you), empty lairs with the time until they fill, bosses and caches. Ones past the minimap's edge wait on its rim | |
+| **Minimap pins** | On the minimap: guardians (white asleep, red when chasing you), empty lairs with the time until they fill, bosses and caches. Ones past the minimap's edge wait on its rim. While you play, the game's own red flag on the nearest guardian is hidden (it comes back when you leave the game, so removing the addon leaves your game as it was) | |
+| **Minimap range ring** | On the minimap, round you: how far your chosen skill reaches. It lights up when a guardian's lair is within it, so you can strike the guardian the moment it appears | your skill's range |
 
 Guardians: one asleep at its lair wakes when it's hit, or when a hero comes within 20 yd of it. Once awake it follows you while you're within 97.5 yd of its lair (not of the guardian). Go past that and it gives up, walks home and heals back to full health. Hit it on the way and it turns around. On its way home, coming near doesn't wake it; only a hit does. In a party it first turns to another hero still within reach of its lair.
+
+The **minimap range ring** has a skill picker for every class in one place, so each of your heroes keeps its own (each class starts on its spell range, shot range or strike reach). Pick **Longest** and it follows whichever of your skills reaches furthest right now, switching as soon as another one grows past it. You can also type a range of your own instead. You choose what lights it: empty lairs (any time, or only those filling within so many seconds), sleeping guardians, guardians chasing you, and bosses. An early warning can colour it a few yards before. It can be solid or dotted, with its own width, colours and opacity, a fill, a pulse while in range, a ring round whatever is in range, the range written over it, or stay hidden until a lair is near.
 
 Telegraphs stand still while the game does: while you choose an upgrade or a chest's prize, and on the pause screen. Nothing fills or runs out meanwhile, and they carry on when you're back. A **Test** press still plays.
 
 Telegraphs for abilities, items and talents only appear while your hero has them, and a racial's only for its race. Abilities, talents and run jewelry come from the damage meter's list of your loadout; amulets are also read from their tooltips as you swap them during a run. The amulets' "at most N times a second" limits, sizes and "+N% area" / "+N% duration" are read from their own text.
 
 Your talents come from the damage meter, which lists each one with its rank. If the meter hasn't got them yet, the addon asks it again every 5 seconds (`/ast meter` shows what it has, `/ast meter off` stops the asking). Until then, a talent with an aura (Shadowform) is recognised from the aura, and the others the first time they go off.
+
+## Hero bar
+
+A health bar of your own, off to start with: turn it on in the options under **Hero bar**. Its page has tabs: Bar, Health & mana, Shields, Icons and Game frames.
+
+- **Where it goes:** wherever you drag it (unlock it first), above your hero or under your hero, at any scale. Three looks to start from: Subdued, Sleek and Bold.
+- **Health:** coloured by health, by class or in your own colour, with a damage trail, a low-health warning and the numbers in any of several forms. Mana (or rage, or energy) can sit underneath.
+- **Shields:** laid over your health. Past 100% a second layer goes over the first, and a third past 200%, each in its own colour. Or show just a fixed mark at the bar's end while you have any shield. The shield can also be added into the health numbers.
+- **Icons:** your skills from action bars 1 to 6, the jewelry you wear and your buffs, under or over the bar, with their cooldowns if you want them. Pick exactly which ones show: each class's skills on their own, and one list each for jewelry and buffs.
+- **Game frames:** hide the game's own player frame, your skill and jewelry icons under it, the buff icons by the minimap, or the enemy's frame.
+- **Test** plays a short demo, even with the bar turned off. `/ast bar` shows or hides it (`/ast bar lock`, `unlock`, `test`, `reset`).
 
 ## Languages
 
@@ -252,7 +266,7 @@ Click a telegraph to see what it shows, its size right now, whether your hero ha
 
 - **Behaviour**
   - **When**: briefly on cast, or always with a cooldown fill (or when it goes off).
-  - **Flash length**, and **Most at once** for the enemy effects: a limit on how many rings are drawn when a pack dies together.
+  - **Flash length**, and **Most at once** for every telegraph that can show more than one: the newest rings when a pack dies together, the newest spots of a ground spell, the nearest guardians and downed teammates.
   - **Cooldown fill**, **Duration fill** and **Uptime look**: untick one to drop that time from the telegraph.
 - **Parts**: each part of the telegraph on or off, and off means gone entirely (no need to set an opacity to 0):
   - **Outline**: the ring's (or cone's) edge.

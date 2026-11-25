@@ -120,7 +120,7 @@ local COMMON = {
 	width = 2, glow = false, strip = 3,                                    -- Smooth
 	size = 4, spacing = 10, fillSpacing = 12, fillStyle = "solid",         -- Dots
 	length = 0, radius = 8,
-	most = 0,                                                              -- enemy effects: 0 = no cap
+	most = 0,                                                              -- most shown at once: 0 = no cap
 	-- every telegraph starts as just its ring (the user, 2026-11-24): no fill, no cooldown or
 	-- duration shown in it, no glow; each can be turned on on its page or the All telegraphs tab
 	cdFill = false, durFill = false, uptime = false,                       -- the time it shows
@@ -3586,7 +3586,7 @@ local function DrawSpots(j, p, now)
 				if ( not newest or s.at > newest.at ) then
 					newest = s;
 				end
-			else
+			elseif ( not s.over ) then
 				-- at its own height, not yours: it stays on the ground where it is
 				H.dz = s.z and s.z - p.z or 0;
 				DrawSpot(s.x - p.x, s.y - p.y, s.r or j.size, st, j.alpha * fade, st.durFill and math.min(1, age / s.dur) or 1);
@@ -3792,6 +3792,56 @@ local function CollectJobs(now, inRun)
 	return jobs, active, watch;
 end
 
+-- "Most at once" (st.most > 0): of a telegraph that shows many, the nearest (teammates down, a
+-- guardian's rings) or the newest (a ground spell's spots: the rest marked `over`, which every
+-- drawer of spots leaves out). An enemy effect's rings are capped where they're drawn.
+function fx.Cap(j, p, now)
+	local most = j.st.most or 0;
+	if ( j.def.shape == "ground" ) then
+		local alive = {};
+		for k = 1, table.getn(spots) do
+			local s = spots[k];
+			if ( s.id == j.def.id ) then
+				s.over = nil;
+				if ( ( s.cands or s.shown ) and now - s.at <= s.dur + 0.4 ) then
+					table.insert(alive, s);
+				end
+			end
+		end
+		if ( most > 0 and table.getn(alive) > most ) then
+			table.sort(alive, function(a, b) return a.at > b.at; end);
+			for i = most + 1, table.getn(alive) do
+				alive[i].over = true;
+			end
+		end
+		return;
+	end
+	local list = j.downed or j.points;
+	if ( most <= 0 or not list or table.getn(list) <= most ) then
+		return;
+	end
+	local function Far(e)
+		local x, y = e.x, e.y;
+		if ( not e.rel ) then
+			x, y = x - p.x, y - p.y;
+		end
+		return x * x + y * y;
+	end
+	local near = {};
+	for i = 1, table.getn(list) do
+		near[i] = list[i];
+	end
+	table.sort(near, function(a, b) return Far(a) < Far(b); end);
+	for i = table.getn(near), most + 1, -1 do
+		table.remove(near, i);
+	end
+	if ( j.downed ) then
+		j.downed = near;
+	else
+		j.points = near;
+	end
+end
+
 local function RenderJobs(now, jobs, active, watch, inRun)
 	local p, err = AZS_GetPlayerPosition();
 	if ( not p ) then
@@ -3801,6 +3851,8 @@ local function RenderJobs(now, jobs, active, watch, inRun)
 	if ( not BuildMap(p) ) then
 		return;
 	end
+	-- when the map was last made (the hero bar floats above your hero by it)
+	AST.mapAt = GetTime();
 	if ( watch and inRun ) then
 		PollEvents(now, p, active, OnShieldBurst);
 	end
@@ -3817,6 +3869,9 @@ local function RenderJobs(now, jobs, active, watch, inRun)
 	for i = 1, table.getn(jobs) do
 		local j = jobs[i];
 		j.facing = facing;
+		if ( j.def.shape == "ground" or j.downed or j.points ) then
+			fx.Cap(j, p, now);
+		end
 		if ( lab ) then
 			lab.Pre(j, p, now);
 		end
@@ -3889,7 +3944,8 @@ local function Draw()
 	CheckRun();
 	screenW, screenH = WorldFrame:GetWidth() or screenW, WorldFrame:GetHeight() or screenH;
 	local jobs, active, watch = CollectJobs(now, inRun);
-	if ( table.getn(jobs) > 0 or ( watch and inRun ) ) then
+	-- (the map is made anyway while the hero bar wants it: AST.wantMap)
+	if ( table.getn(jobs) > 0 or ( watch and inRun ) or AST.wantMap ) then
 		RenderJobs(now, jobs, active, watch, inRun);
 	end
 	drawnQuads = used;
@@ -3926,6 +3982,45 @@ AST = {
 
 function AST.State()
 	return db, DEFS, myClass, skipped, byId;
+end
+
+-- For the hero bar (HeroBar.lua): a tooltip's lines (TipLines' methods), and a spell's cooldown as
+-- the spell line has it (by its name or key: left, max; nil when the line doesn't list it).
+AST.TipLines = TipLines;
+
+-- A telegraph's range now, in yd: its tooltip's (read again at most once a second), else its
+-- formula or its fixed size (the minimap's range ring: Guardians.lua); and where that came from
+-- ("tooltip", "formula", "your override", "fixed"...).
+function AST.RangeOf(def)
+	if ( not db ) then
+		return def.radius or def.base;
+	end
+	local now = GetTime() - clockGap;
+	if ( def.sizePattern and now - (tips.readAt[def.id] or 0) > 1 ) then
+		ReadSize(def, now);
+		tips.readAt[def.id] = now;
+	end
+	return SizeOf(def, Settings(def), now);
+end
+
+-- Whether your hero has a skill this run (the minimap ring's "longest"): one on the spell list, or
+-- one the meter lists that the spell list may not show; a ring with no skill of its own (spell
+-- range, melee range) always. A talent's or an item's effect isn't a skill: false.
+function AST.HaveSkill(def)
+	if ( def.spellKey ) then
+		if ( SpellOf(def) ) then
+			return true;
+		end
+		return ( def.unlisted ~= nil and def.match ~= nil and Has(def, GetTime() - clockGap) ~= nil );
+	end
+	return def.match == nil;
+end
+
+function AST.CooldownOf(name)
+	local c = cds[Norm(name)];
+	if ( c ) then
+		return c.left, c.max;
+	end
 end
 
 -- What the Lab (Lab.lua) draws with: Core's own pieces, and what it knows.
@@ -4248,6 +4343,25 @@ SlashCmdList["ASTELEGRAPHS"] = function(msg)
 	elseif ( cmd == "showcase" and AST.showcase ) then
 		-- /ast showcase: all your telegraphs at once round you, turning, until it's run again
 		AST.showcase.Toggle();
+	elseif ( cmd == "bar" and AST.bar ) then
+		-- /ast bar: the hero bar on or off; lock, unlock, reset (all its settings), test (its demo)
+		local s = AST.bar.S();
+		if ( rest == "lock" or rest == "unlock" ) then
+			s.locked = rest == "lock";
+		elseif ( rest == "reset" ) then
+			AST.bar.Reset();
+		elseif ( rest == "test" ) then
+			-- (shown while it plays even with the bar off; again to stop it)
+			AST.bar.Test();
+		elseif ( rest == "shield" ) then
+			AST.bar.ShieldDump();
+		else
+			s.on = not s.on;
+		end
+		AST.RefreshOptions();
+	elseif ( cmd == "what" and AST.bar ) then
+		-- /ast what: the frame under the mouse (to tell what a setting hides)
+		AST.bar.What();
 	elseif ( cmd == "ring" and not byId.ring ) then
 		Print(table.getn(skipped) > 0 and "the custom ring is left to Priest Telegraphs: /ring there."
 			or "no custom ring yet: your class isn't known yet, try again in a moment.");

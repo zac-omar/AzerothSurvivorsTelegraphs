@@ -249,7 +249,7 @@ local function EachSpot(j, p, now, fn)
 				if ( not newest or s.at > newest.at ) then
 					newest, nfade = s, fade;
 				end
-			else
+			elseif ( not s.over ) then
 				D.H.dz = s.z and s.z - p.z or 0;
 				fn(j, s.x - p.x, s.y - p.y, s.r or j.size, j.alpha * fade, st.durFill and math.min(1, age / s.dur) or 1, age, now);
 				D.H.dz = 0;
@@ -532,7 +532,7 @@ local function ArcPiece(path, k, line, cx, cy, jtx, jty, jrx, jry, thc, w, xl, x
 	LAB.Place(t, xl, yl, xr - xl, yh - yl, ox + ux * dl + vx * dt, oy - uy * dl - vy * dt,
 		ox + ux * dl + vx * db, oy - uy * dl - vy * db,
 		ox + ux * dr + vx * dt, oy - uy * dr - vy * dt,
-		ox + ux * dr + vx * db, oy - uy * dr - vy * db, c[1], c[2], c[3], math.min(1, (c[4] or 1) * alpha));
+		ox + ux * dr + vx * db, oy - uy * dr - vy * db, c[1], c[2], c[3], math.min(1, (c[4] or 1) * alpha), 0.02);
 end
 
 local function TexArcs(path, ex, ey, ax, ay, bx, by, lw, w, c, alpha, over)

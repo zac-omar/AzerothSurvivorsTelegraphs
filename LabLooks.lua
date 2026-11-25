@@ -500,7 +500,7 @@ function K.Under(j, p, now)
 		for k = 1, table.getn(spots) do
 			local s = spots[k];
 			local age = now - s.at;
-			if ( s.id == def.id and ( s.cands or s.shown ) and age <= s.dur + 0.4 ) then
+			if ( s.id == def.id and ( s.cands or s.shown ) and not s.over and age <= s.dur + 0.4 ) then
 				local fade = 1;
 				if ( age > s.dur ) then
 					fade = 1 - (age - s.dur) / 0.4;

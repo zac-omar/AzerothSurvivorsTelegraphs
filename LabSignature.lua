@@ -208,7 +208,7 @@ local function EachSpot(j, p, now, f)
 	for k = 1, table.getn(spots) do
 		local s = spots[k];
 		local age = now - s.at;
-		if ( s.id == def.id and ( s.cands or s.shown ) and age >= 0 and age <= s.dur + 0.4 ) then
+		if ( s.id == def.id and ( s.cands or s.shown ) and not s.over and age >= 0 and age <= s.dur + 0.4 ) then
 			if ( follows ) then
 				if ( not newest or s.at > newest.at ) then
 					newest = s;

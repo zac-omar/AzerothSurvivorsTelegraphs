@@ -33,6 +33,7 @@ local ICONS = {
 	common = "Interface\\Icons\\INV_Misc_Gem_01",
 	class = "Interface\\Icons\\INV_Misc_QuestionMark",
 	addon = "Interface\\Icons\\Spell_Holy_HolyNova",
+	hero = "Interface\\Icons\\Spell_Holy_SealOfProtection",
 };
 
 local W, H = 800, 600;          -- the window
@@ -73,6 +74,11 @@ local function Refresh()
 	if ( ui.all and ui.all:IsShown() ) then
 		for i = 1, table.getn(ui.all.refreshers) do
 			ui.all.refreshers[i]();
+		end
+	end
+	if ( ui.hero and ui.hero:IsShown() ) then
+		for i = 1, table.getn(ui.hero.refreshers) do
+			ui.hero.refreshers[i]();
 		end
 	end
 end
@@ -322,7 +328,7 @@ local function Row(panel, label, when, h)
 	-- a long one (in another language) stays left of the row's controls
 	row.label:SetWidth(CX - 6);
 	row.label:SetJustifyH("LEFT");
-	row.when, row.tag = when, panel.tag;
+	row.when, row.tag, row.sub = when, panel.tag, panel.subTag;
 	table.insert(panel.rows, row);
 	return row;
 end
@@ -330,7 +336,7 @@ end
 -- A heading over the rows after it, hidden when they all are.
 local function Section(panel, title)
 	local row = CreateFrame("Frame", nil, panel);
-	row.height, row.section, row.tag = 26, true, panel.tag;
+	row.height, row.section, row.tag, row.sub = 26, true, panel.tag, panel.subTag;
 	row:SetHeight(row.height);
 	local text = Label(row, title, "GameFontNormalSmall", true);
 	text:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 6);
@@ -353,6 +359,10 @@ local function Layout(panel)
 		end
 		-- a telegraph with rows of its own (the minimap's pins) shows only those, and only it them
 		if ( selected and panel == ui.panel and ( selected.ownRows or rows[i].tag ) and rows[i].tag ~= selected.ownRows ) then
+			shown[i] = false;
+		end
+		-- a page on tabs (the Hero bar's): only the rows of the tab shown
+		if ( panel.sub and rows[i].sub and rows[i].sub ~= panel.sub ) then
 			shown[i] = false;
 		end
 	end
@@ -450,7 +460,7 @@ end
 local function Choice(panel, label, when, choices, get, set)
 	local row = Row(panel, label, when);
 	local buttons = {};
-	for i = 1, 3 do
+	for i = 1, 5 do
 		-- Lua 5.0 has one `i` for the whole loop, so each button keeps its own copy
 		local index = i;
 		buttons[index] = Button(row, "", 60, 18, function()
@@ -464,7 +474,7 @@ local function Choice(panel, label, when, choices, get, set)
 			list = list(selected) or {};
 		end
 		local x = CX;
-		for i = 1, 3 do
+		for i = 1, 5 do
 			local b, ch = buttons[i], list[i];
 			if ( ch ) then
 				b.value = ch[1];
@@ -612,7 +622,9 @@ end
 
 -- A colour: its swatch, the presets, and the colour picker if the client has one. `key` is the
 -- setting ("line" or "fill") of the selected telegraph.
-local function Color(panel, label, when, key)
+-- `tbl`: where the colour is kept (a function giving the table; the selected telegraph's settings
+-- when left out).
+local function Color(panel, label, when, key, tbl)
 	local row = Row(panel, label, when);
 	local swatch = row:CreateTexture(nil, "OVERLAY");
 	AST.SetPiece(swatch, SOLID);
@@ -620,11 +632,13 @@ local function Color(panel, label, when, key)
 	swatch:SetHeight(18);
 	swatch:SetPoint("LEFT", row, "LEFT", CX, 0);
 	local function SetRGB(r, g, b)
-		local s = AST.Settings(selected);
+		local s = tbl and tbl() or AST.Settings(selected);
 		local c = s[key];
 		c[1], c[2], c[3] = r, g, b;
-		s.hand = s.hand or {};
-		s.hand[key] = true;
+		if ( not tbl ) then
+			s.hand = s.hand or {};
+			s.hand[key] = true;
+		end
 		Refresh();
 	end
 	local x = CX + 26;
@@ -643,7 +657,7 @@ local function Color(panel, label, when, key)
 	end
 	if ( ColorPickerFrame ) then
 		local pick = Button(row, "Pick", 40, 18, function()
-			local c = AST.Settings(selected)[key];
+			local c = (tbl and tbl() or AST.Settings(selected))[key];
 			local before = { r = c[1], g = c[2], b = c[3] };
 			ColorPickerFrame.hasOpacity = nil;
 			ColorPickerFrame.previousValues = before;
@@ -663,7 +677,7 @@ local function Color(panel, label, when, key)
 		pick:SetPoint("LEFT", row, "LEFT", x + 4, 0);
 	end
 	table.insert(panel.refreshers, function()
-		local c = AST.Settings(selected)[key];
+		local c = (tbl and tbl() or AST.Settings(selected))[key];
 		swatch:SetVertexColor(c[1], c[2], c[3], 1);
 	end);
 	return row;
@@ -749,6 +763,7 @@ local function BuildNav()
 	ui.tabs = {};
 	Tab("general", ICONS.general, "General");
 	Tab("all", ICONS.addon, "All telegraphs");
+	Tab("hero", ICONS.hero, "Hero bar");
 	Tab("common", ICONS.common, "Any class");
 	Tab("lab", "Interface\\Icons\\INV_Misc_Spyglass_02", "Lab");
 	ui.classHead = Label(ui.nav, "Classes", "GameFontNormalSmall", true);
@@ -786,8 +801,9 @@ local function BuildNav()
 		local y = -6;
 		byPage.general:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y);
 		byPage.all:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 30);
-		ui.classHead:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 12, y - 70);
-		y = y - 86;
+		byPage.hero:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 60);
+		ui.classHead:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 12, y - 100);
+		y = y - 116;
 		local classes = ClassOrder();
 		for i = 1, table.getn(classes) do
 			local b = byPage[classes[i]];
@@ -1117,6 +1133,11 @@ local function ModeChoices(d)
 end
 
 local function Pct(v) return string.format("%d%%", math.floor(v * 100 + 0.5)); end
+-- A telegraph that can show more than one at a time (its "Most at once"): enemy effects, a ground
+-- spell's spots, teammates down, a guardian's rings.
+local function Many(d)
+	return d.shape == "enemy" or d.shape == "ground" or d.shape == "downed" or d.shape == "world";
+end
 local function Px(v) return string.format(L("%g px"), v); end
 local function Yd(v) return string.format(L("%g yd"), v); end
 
@@ -1225,6 +1246,208 @@ end
 
 -- The settings rows, the ones that don't fit what the telegraph is or how it is drawn hidden. A
 -- setting changed here is marked as set by hand (s.hand[key]): the All telegraphs page leaves it.
+-- A choice from a list too long for a row of buttons: < and > step through it, and the name
+-- between them opens the whole list. list(): { { value, text }, ... }; get(): the value now.
+local pickMenu;
+local function Pick(panel, label, when, list, get, set)
+	local row = Row(panel, label, when);
+	local function Step(by)
+		local l, at = list(), 1;
+		for i = 1, table.getn(l) do
+			if ( l[i][1] == get() ) then
+				at = i;
+			end
+		end
+		if ( l[1] ) then
+			at = at + by;
+			if ( at < 1 ) then
+				at = table.getn(l);
+			elseif ( at > table.getn(l) ) then
+				at = 1;
+			end
+			set(l[at][1]);
+			Refresh();
+		end
+	end
+	local prev = Button(row, "<", 20, 18, function() Step(-1); end);
+	prev:SetPoint("LEFT", row, "LEFT", CX, 0);
+	local name;
+	name = Button(row, "", 220, 18, function()
+		local m = pickMenu;
+		if ( not m ) then
+			m = CreateFrame("Frame", "ASTPickMenu", win);
+			m:SetBackdrop(FLAT);
+			m:SetBackdropColor(0.08, 0.08, 0.11, 0.98);
+			m:SetBackdropBorderColor(0.75, 0.55, 1, 1);
+			m:SetFrameLevel((win:GetFrameLevel() or 0) + 30);
+			m:EnableMouse(true);
+			m.buttons = {};
+			pickMenu = m;
+		end
+		if ( m:IsShown() and m.owner == row ) then
+			m:Hide();
+			return;
+		end
+		m.owner = row;
+		local l = list();
+		local per = 14;
+		local cols = math.max(1, math.ceil(table.getn(l) / per));
+		local rows = math.min(per, table.getn(l));
+		for i = 1, math.max(table.getn(l), table.getn(m.buttons)) do
+			local entry = l[i];
+			local b = m.buttons[i];
+			if ( entry and not b ) then
+				b = Button(m, "", 200, 18, function() end);
+				m.buttons[i] = b;
+			end
+			if ( entry ) then
+				local value = entry[1];
+				b.text:SetText(entry[2]);
+				b:SetScript("OnClick", function()
+					set(value);
+					m:Hide();
+					Refresh();
+				end);
+				local col, at = math.floor((i - 1) / per), i - 1 - per * math.floor((i - 1) / per);
+				b:ClearAllPoints();
+				b:SetPoint("TOPLEFT", m, "TOPLEFT", 8 + col * 204, -8 - at * 20);
+				SetActive(b, value == get());
+				b:Show();
+			elseif ( b ) then
+				b:Hide();
+			end
+		end
+		m:SetWidth(16 + cols * 204 - 4);
+		m:SetHeight(16 + rows * 20 - 2);
+		m:ClearAllPoints();
+		-- below the name, or above it where below would leave the window
+		local bottom, winBottom = name:GetBottom(), win:GetBottom();
+		if ( bottom and winBottom and bottom - (16 + rows * 20) < winBottom ) then
+			m:SetPoint("BOTTOMLEFT", name, "TOPLEFT", 0, 2);
+		else
+			m:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -2);
+		end
+		m:Show();
+	end);
+	name:SetPoint("LEFT", prev, "RIGHT", 4, 0);
+	name.text:SetWidth(212);
+	local nxt = Button(row, ">", 20, 18, function() Step(1); end);
+	nxt:SetPoint("LEFT", name, "RIGHT", 4, 0);
+	table.insert(panel.refreshers, function()
+		local l, text = list(), nil;
+		for i = 1, table.getn(l) do
+			if ( l[i][1] == get() ) then
+				text = l[i][2];
+			end
+		end
+		name.text:SetText(text or ( l[1] and l[1][2] ) or L("None"));
+	end);
+	row:SetScript("OnHide", function()
+		if ( pickMenu and pickMenu.owner == row ) then
+			pickMenu:Hide();
+		end
+	end);
+	return row;
+end
+
+-- The minimap's range ring (Guardians.lua): its rows alone. Its settings are its telegraph's own,
+-- with defaults of their own (AST.guard.MR()).
+local function RangeRows(panel)
+	local G = AST.guard;
+	local function MR() return G.MR(); end
+	local function Get(key) return function() return MR()[key]; end; end
+	local function Put(key) return function(v) MR()[key] = v; end; end
+	local function Ring(d) return d.ownRows == "mmrange"; end
+	local function Warns(d) return Ring(d) and MR().mmNear > 0; end
+	local function Dotted(d) return Ring(d) and MR().mmStyle == "dotted"; end
+	local function Filled(d) return Ring(d) and MR().mmFill; end
+	local function Lairs(d) return Ring(d) and MR().mmEmpty; end
+	local function Half(v) return math.floor(v * 2 + 0.5) / 2; end
+	-- a class's skills, each with its range (yours now; another class's before its Area), after
+	-- "Longest" (the longest of the skills you have, as it changes)
+	local function Skills(class)
+		local _, _, myClass = AST.State();
+		local out, list = {}, G.Skills(class);
+		local far = ( class == myClass ) and G.Longest(class);
+		table.insert(out, { "longest", far and string.format(L("Longest (%s)"), Yd(Half(far))) or L("Longest") });
+		for i = 1, table.getn(list) do
+			local d = list[i];
+			local yd = ( class == myClass ) and AST.RangeOf(d) or G.BaseOf(d);
+			local text = Named(d);
+			if ( type(yd) == "number" and yd > 0 ) then
+				text = text .. " (" .. Yd(Half(yd)) .. ")";
+			end
+			table.insert(out, { d.id, text });
+		end
+		return out;
+	end
+	panel.tag = "mmrange";
+	Section(panel, "Range");
+	Text(panel, "Now", Ring, function()
+		local R, def = G.RangeNow();
+		if ( MR().mmOverride > 0 ) then
+			return string.format(L("Your own range: %s"), Yd(R));
+		end
+		local _, _, myClass = AST.State();
+		local longest = myClass and MR().mmSkills[myClass] == "longest";
+		if ( longest and not def ) then
+			return L("Longest: none of your skills yet");
+		elseif ( not def ) then
+			return L("Your class has no range to show");
+		elseif ( not R ) then
+			return string.format(L("%s: not known yet"), Named(def));
+		end
+		return ( longest and ( L("Longest") .. ": " ) or "" ) .. Named(def) .. ": " .. Yd(Half(R));
+	end);
+	Stepper(panel, "Your own range", Ring, Get("mmOverride"), Put("mmOverride"), 1, 0, 100, function(v)
+		return v > 0 and Yd(v) or L("Off: the skill's");
+	end, true);
+	Section(panel, "Skill for each class");
+	for i = 1, table.getn(G.CLASSES) do
+		local class = G.CLASSES[i];
+		Pick(panel, Title(class), Ring, function() return Skills(class); end,
+			function()
+				if ( MR().mmSkills[class] == "longest" ) then
+					return "longest";
+				end
+				local d = G.SkillOf(class);
+				return d and d.id;
+			end,
+			function(v) MR().mmSkills[class] = v; end);
+	end
+	Section(panel, "Lights up for");
+	Check(panel, "Empty lairs", Ring, Get("mmEmpty"), Put("mmEmpty"), "Where a guardian will appear");
+	Stepper(panel, "Filling within", Lairs, Get("mmSoon"), Put("mmSoon"), 5, 0, 180, function(v)
+		return v > 0 and string.format(L("%d sec"), v) or L("Any time");
+	end);
+	Check(panel, "Sleeping guardians", Ring, Get("mmAsleep"), Put("mmAsleep"), "Up and waiting at their lair");
+	Check(panel, "Guardians chasing you", Ring, Get("mmAwake"), Put("mmAwake"));
+	Check(panel, "Bosses", Ring, Get("mmBosses"), Put("mmBosses"));
+	Stepper(panel, "Early warning", Ring, Get("mmNear"), Put("mmNear"), 1, 0, 50, function(v)
+		return v > 0 and string.format(L("%g yd before"), v) or L("Off");
+	end);
+	Color(panel, "Warning colour", Warns, "mmNearC", MR);
+	Check(panel, "Only near a lair", Ring, Get("mmOnlyNear"), Put("mmOnlyNear"),
+		string.format(L("Hidden until one is within %d yd of the ring"), G.NEAR));
+	Section(panel, "Look");
+	Choice(panel, "Line", Ring, { { "solid", "Solid", 50 }, { "dotted", "Dotted", 50 } }, Get("mmStyle"), Put("mmStyle"));
+	Stepper(panel, "Width", Ring, Get("mmWidth"), Put("mmWidth"), 0.5, 1, 6, Px);
+	Stepper(panel, "Dot spacing", Dotted, Get("mmGap"), Put("mmGap"), 1, 3, 20, Px);
+	Color(panel, "Colour", Ring, "mmLine", MR);
+	Stepper(panel, "Opacity", Ring, function() return MR().mmLine[4]; end, function(v) MR().mmLine[4] = v; end,
+		0.05, 0.1, 1, Pct);
+	Color(panel, "In range", Ring, "mmHot", MR);
+	Stepper(panel, "In range opacity", Ring, function() return MR().mmHot[4]; end, function(v) MR().mmHot[4] = v; end,
+		0.05, 0.1, 1, Pct);
+	Check(panel, "Pulse in range", Ring, Get("mmPulse"), Put("mmPulse"));
+	Check(panel, "Thicker in range", Ring, Get("mmGrow"), Put("mmGrow"));
+	Check(panel, "Mark what's in range", Ring, Get("mmMark"), Put("mmMark"), "A ring round its pin");
+	Check(panel, "Fill", Ring, Get("mmFill"), Put("mmFill"), "A faint disc inside the ring");
+	Stepper(panel, "Fill opacity", Filled, Get("mmFillA"), Put("mmFillA"), 0.05, 0.05, 0.6, Pct);
+	Check(panel, "Show the range", Ring, Get("mmText"), Put("mmText"), "Its yards over the ring");
+	panel.tag = nil;
+end
+
 local function SettingRows(panel)
 	local function S() return AST.Settings(selected); end
 	local function Mark(key)
@@ -1249,8 +1472,9 @@ local function SettingRows(panel)
 			return m == "cast" or m == "event" or m == "shield" or m == "proc";
 		end,
 		Get("flash"), Put("flash"), 0.1, 0.1, 5, function(v) return string.format(L("%.1f sec"), v); end, true);
-	-- fewer rings when a pack dies at once, for slower computers
-	Stepper(panel, "Most at once", function(d) return d.shape == "enemy"; end, Get("most"), Put("most"), 1, 0, 40,
+	-- fewer at once (a pack dying together, many spots, many guardians), for a calmer screen or a
+	-- slower computer: every telegraph that can show more than one
+	Stepper(panel, "Most at once", function(d) return Many(d); end, Get("most"), Put("most"), 1, 0, 40,
 		function(v) return v <= 0 and L("no limit") or string.format(L("%d rings"), v); end);
 	-- the time it shows, each on its own: a cooldown filling in, a spot's time running out, and a ring
 	-- that moves with you up for good
@@ -1323,6 +1547,7 @@ local function SettingRows(panel)
 	Check(panel, "Past the edge", Pins, Get("pinEdge"), Put("pinEdge"), "Kept on the rim, pointing their way");
 	Stepper(panel, "Pin size", Pins, Get("pinSize"), Put("pinSize"), 1, 6, 32, Px);
 	panel.tag = nil;
+	RangeRows(panel);
 	-- the mode and style change which rows show
 	table.insert(panel.refreshers, function() Layout(panel); end);
 end
@@ -1454,7 +1679,8 @@ local function BuildPanel()
 		else
 			remove:Hide();
 		end
-		if ( selected.shape == "lab" ) then
+		-- (an experiment, or one with rows of its own: nothing to copy)
+		if ( selected.shape == "lab" or selected.ownRows ) then
 			copy:Hide();
 			menu:Hide();
 		else
@@ -1499,6 +1725,17 @@ local function BuildGeneral()
 		local calls, quads, problem = AST.Stats();
 		return problem or string.format(L("%d pieces on screen"), quads);
 	end);
+	-- the Lab's FPS counter (Lab.lua; off to start with), here so it needn't be looked for in the Lab
+	local function Fps()
+		local _, _, _, _, byId = AST.State();
+		return byId and byId.lab_fps;
+	end
+	Check(g, "FPS counter", function() return Fps() ~= nil; end, function() return Fps() ~= nil and AST.Settings(Fps()).enabled == true; end,
+		function(v)
+			if ( Fps() ) then
+				AST.Settings(Fps()).enabled = v;
+			end
+		end, "Frame rate and what the telegraphs take of it, in a bar you can drag.");
 
 	-- everything as it came, asked first
 	Section(g, "Start over");
@@ -1679,7 +1916,7 @@ local function BuildAll()
 	Number("Wall height", "wallHeight", 0.25, 0.25, 5, Yd, 1, Plain("wallHeight"));
 	Number("Band every", "bandEvery", 1, 1, 50, Yd, 5, Plain("bandEvery"));
 	Number("Most at once", "most", 1, 0, 40, function(v) return v <= 0 and L("no limit") or string.format(L("%d rings"), v); end, 0,
-		function(d, s, v) if ( d.shape ~= "enemy" ) then return false; end s.most = v; end);
+		function(d, s, v) if ( not Many(d) ) then return false; end s.most = v; end);
 
 	Section(a, "Colours");
 	BulkColor(a, "Outline colour", "line", function(c)
@@ -1719,6 +1956,265 @@ end
 
 ---------------------------------------------------------------------------------------------
 -- The window
+
+---------------------------------------------------------------------------------------------
+-- The Hero bar page (HeroBar.lua): every part of the bar, and the game's frames it can hide.
+
+-- The hero bar's icons, class by class (Hero bar page): pick a class and a group, and everything
+-- that has been on its bar is listed, each shown or not.
+local function HeroPicks(h)
+	local B = AST.bar;
+	local CLASSES = { "warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid" };
+	local GROUPS = { { "skills", "Skills", 56 }, { "jewelry", "Jewelry", 64 }, { "buffs", "Buffs", 50 } };
+	local ROWS = 64;
+	local function Class()
+		local _, _, my = AST.State();
+		return ui.barClass or my or "warrior";
+	end
+	local function Group() return ui.barGroup or "skills"; end
+	-- everything the class's group can hold (the catalog's, then what else has been on its bar)
+	local function Items() return B.Choices(Class(), Group()); end
+	local function Off(it) return it.e ~= nil and it.e.off == true; end
+	local function All(off)
+		local items = Items();
+		for i = 1, table.getn(items) do
+			B.SetChoice(Class(), Group(), items[i], off);
+		end
+		-- every box shows it at once
+		Refresh();
+	end
+	Section(h, "Which icons");
+	Choice(h, "Of", nil, GROUPS, Group, function(v) ui.barGroup = v; end);
+	-- (a class's own skills; buffs and jewelry are chosen once for every class)
+	Pick(h, "Class", function() return Group() == "skills"; end, function()
+		local out = {};
+		for i = 1, table.getn(CLASSES) do
+			table.insert(out, { CLASSES[i], Title(CLASSES[i]) });
+		end
+		return out;
+	end, Class, function(v) ui.barClass = v; end);
+	Text(h, "", nil, function()
+		local items, on = Items(), 0;
+		for i = 1, table.getn(items) do
+			if ( not Off(items[i]) ) then
+				on = on + 1;
+			end
+		end
+		if ( table.getn(items) == 0 ) then
+			return L("Nothing yet: what shows on your bar is listed here.");
+		end
+		return string.format(L("%d of %d shown"), on, table.getn(items));
+	end);
+	Actions(h, "All of them", nil, { { "Show all", function() All(nil); end }, { "Hide all", function() All(true); end } });
+	for i = 1, ROWS do
+		-- Lua 5.0 has one `i` for the whole loop, so each row keeps its own copy
+		local index = i;
+		local row = Row(h, "", function() return Items()[index] ~= nil; end);
+		local b = Button(row, "", 16, 16, function()
+			local it = Items()[index];
+			if ( it ) then
+				B.SetChoice(Class(), Group(), it, not Off(it));
+				Refresh();
+			end
+		end);
+		b:SetPoint("LEFT", row, "LEFT", CX, 0);
+		local mark = b:CreateTexture(nil, "OVERLAY");
+		AST.SetPiece(mark, SOLID);
+		mark:SetVertexColor(0.75, 0.55, 1, 1);
+		mark:SetWidth(8);
+		mark:SetHeight(8);
+		mark:SetPoint("CENTER", b, "CENTER", 0, 0);
+		local icon = row:CreateTexture(nil, "ARTWORK");
+		icon:SetWidth(16);
+		icon:SetHeight(16);
+		icon:SetPoint("LEFT", row, "LEFT", CX + 24, 0);
+		local name = Label(row, "");
+		name:SetPoint("LEFT", row, "LEFT", CX + 46, 0);
+		table.insert(h.refreshers, function()
+			local it = Items()[index];
+			if ( not it ) then
+				return;
+			end
+			local off = Off(it);
+			if ( off ) then
+				mark:Hide();
+			else
+				mark:Show();
+			end
+			icon:SetTexture(it.icon);
+			icon:SetVertexColor(1, 1, 1, off and 0.35 or 1);
+			name:SetText(it.name);
+			name:SetTextColor(off and 0.5 or 0.9, off and 0.5 or 0.9, off and 0.55 or 0.9);
+		end);
+	end
+	-- something new on the bar while this is open: listed at once
+	local seen = B.seenV;
+	table.insert(h.live, function()
+		if ( B.seenV ~= seen ) then
+			seen = B.seenV;
+			Refresh();
+		end
+	end);
+end
+
+local function BuildHero()
+	local h = Box(win);
+	ui.hero = h;
+	h:SetPoint("TOPLEFT", win, "TOPLEFT", NAV_W + 18, -TOP);
+	h:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -10, 10);
+	h.rows, h.refreshers, h.live, h.top = {}, {}, {}, -36;
+	local B = AST.bar;
+	-- its parts on tabs along its top (the user, 2026-11-25: the page was long); the last one shown
+	-- is kept for the session
+	local SUBS = { { "bar", "Bar", 60 }, { "health", "Health & mana", 116 }, { "shields", "Shields", 72 }, { "icons", "Icons", 60 },
+		{ "frames", "Game frames", 104 } };
+	h.sub = ui.heroTab or "bar";
+	local tabs, tx = {}, 12;
+	for i = 1, table.getn(SUBS) do
+		local id = SUBS[i][1];
+		local b = Button(h, SUBS[i][2], SUBS[i][3], 22, function()
+			h.sub, ui.heroTab, h.offset = id, id, 0;
+			Refresh();
+		end);
+		b:SetPoint("TOPLEFT", h, "TOPLEFT", tx, -8);
+		tx = tx + math.max(SUBS[i][3], b:GetWidth() or 0) + 4;
+		tabs[id] = b;
+	end
+	table.insert(h.refreshers, function()
+		for id, b in pairs(tabs) do
+			SetActive(b, id == h.sub);
+		end
+	end);
+	local function S() return B.S(); end
+	local function Get(key) return function() return S()[key]; end; end
+	local function Set(key) return function(v) S()[key] = v; end; end
+	local function Is(key, v) return function() return S()[key] == v; end; end
+	local function Yes(key) return function() return S()[key]; end; end
+	local function Times(v) return string.format("%d%%", math.floor(v * 100 + 0.5)); end
+	local function Count(v) return tostring(v); end
+	local function NotNone() return S().text ~= "none"; end
+
+	h.subTag = "bar";
+	Section(h, "Hero bar");
+	Check(h, "Show it", nil, Get("on"), Set("on"), "Your health, shields, mana and icons, where you want them.");
+	Check(h, "Locked", nil, Get("locked"), Set("locked"), "Unlock it to drag it; right-click it to lock it again.");
+	Choice(h, "Place", nil, { { "screen", "Where you put it", 120 }, { "hero", "Above your hero", 120 },
+		{ "under", "Under your hero", 120 } }, Get("anchor"), Set("anchor"));
+	Stepper(h, "Height above you", Is("anchor", "hero"), Get("above"), Set("above"), 0.2, 0, 8, Yd, true);
+	Stepper(h, "Gap under you", Is("anchor", "under"), Get("below"), Set("below"), 1, 0, 200, Px, true);
+	Choice(h, "Look", nil, { { "subdued", "Subdued", 80 }, { "sleek", "Sleek", 70 }, { "bold", "Bold", 60 } }, Get("look"),
+		function(v) B.ApplyLook(v); end);
+	Actions(h, "Position", nil, { { "Reset position", function()
+		local d, s = B.Defaults(), S();
+		s.anchor, s.point, s.rel, s.x, s.y = "screen", d.point, d.rel, d.x, d.y;
+	end } });
+	-- the demo (shown even while it's off; your settings stay as they are); again to stop it
+	local try = Row(h, "Try it");
+	local test = Button(try, "Stop test", 80, 18, function() B.Test(); end);
+	test:SetPoint("LEFT", try, "LEFT", CX, 0);
+	table.insert(h.live, function() test.text:SetText(L(B.Testing() and "Stop test" or "Test")); end);
+
+	Section(h, "Size");
+	Stepper(h, "Width", nil, Get("width"), Set("width"), 10, 60, 700, Px, true);
+	Stepper(h, "Height", nil, Get("height"), Set("height"), 1, 3, 60, Px, true);
+	Stepper(h, "Scale", nil, Get("scale"), Set("scale"), 0.05, 0.5, 3, Times);
+	Stepper(h, "Opacity", nil, Get("alpha"), Set("alpha"), 0.05, 0.1, 1, Pct);
+	Check(h, "Fade when full", nil, Get("fadeFull"), Set("fadeFull"), "Fainter while your health is full and you have no shield.");
+	Stepper(h, "Faded to", Yes("fadeFull"), Get("fadeAlpha"), Set("fadeAlpha"), 0.05, 0, 1, Pct);
+
+	h.subTag = "health";
+	Section(h, "Health");
+	Choice(h, "Colour", nil, { { "health", "By health", 80 }, { "class", "Class", 60 }, { "custom", "Your own", 80 } },
+		Get("healthColor"), Set("healthColor"));
+	Color(h, "Your colour", Is("healthColor", "custom"), "healthRGB", S);
+	Choice(h, "Bar", nil, { { "shaded", "Shaded", 70 }, { "flat", "Flat", 60 } }, Get("texture"), Set("texture"));
+	Choice(h, "Numbers", nil, { { "none", "None", 50 }, { "percent", "%", 36 }, { "current", "Health", 60 },
+		{ "both", "Health / max", 90 }, { "full", "All", 40 } }, Get("text"), Set("text"));
+	Check(h, "Shield in the numbers", NotNone, Get("textShield"), Set("textShield"),
+		"Health + shield: with Health / max, (health + shield) / max.");
+	Choice(h, "Numbers at", NotNone, { { "center", "Middle", 60 }, { "left", "Left", 50 }, { "right", "Right", 50 },
+		{ "above", "Above", 56 } }, Get("textPos"), Set("textPos"));
+	Stepper(h, "Number size", NotNone, Get("textSize"), Set("textSize"), 1, 7, 24, Px);
+	Stepper(h, "Background", nil, Get("bgAlpha"), Set("bgAlpha"), 0.05, 0, 1, Pct);
+	Check(h, "Border", nil, Get("border"), Set("border"), "A thin dark line round it, red and pulsing at low health.");
+	Check(h, "Gloss", nil, Get("gloss"), Set("gloss"), "Light along its top.");
+	Check(h, "Light sweep", nil, Get("sheen"), Set("sheen"), "A soft light runs across it now and then.");
+	Check(h, "Smooth", nil, Get("smooth"), Set("smooth"), "It slides to new values instead of jumping.");
+	Check(h, "Damage trail", nil, Get("trail"), Set("trail"), "What a hit took lingers a moment, then drains away.");
+	Stepper(h, "Warn below", nil, Get("lowAt"), Set("lowAt"), 5, 0, 80, function(v)
+		return v > 0 and string.format("%d%%", v) or L("Off");
+	end);
+
+	Section(h, "Mana");
+	Check(h, "Show mana", nil, Get("power"), Set("power"), "Or rage, or energy: a thin bar under your health.");
+	Stepper(h, "Mana height", Yes("power"), Get("powerHeight"), Set("powerHeight"), 1, 1, 20, Px);
+
+	h.subTag = "shields";
+	Section(h, "Shields");
+	Check(h, "Show shields", nil, Get("shield"), Set("shield"), "Laid over your health: past 100% another layer goes over the first.");
+	Choice(h, "Shows", Yes("shield"), { { "amount", "How much", 80 }, { "marker", "That you have one", 130 } },
+		Get("shieldStyle"), Set("shieldStyle"));
+	Stepper(h, "Mark size", function() return S().shield and S().shieldStyle == "marker"; end, Get("shieldMark"), Set("shieldMark"),
+		5, 5, 100, function(v) return string.format(L("%d%% of the bar"), v); end);
+	Choice(h, "Shield look", Yes("shield"), { { "energy", "Energy", 70 }, { "flat", "Flat", 60 } }, Get("shieldLook"), Set("shieldLook"));
+	Color(h, "First layer", Yes("shield"), "shield1", S);
+	Color(h, "Second layer", function() return S().shield and S().shieldStyle ~= "marker"; end, "shield2", S);
+	Color(h, "Third layer", function() return S().shield and S().shieldStyle ~= "marker"; end, "shield3", S);
+	Stepper(h, "Shield opacity", Yes("shield"), Get("shieldAlpha"), Set("shieldAlpha"), 0.05, 0.1, 1, Pct);
+	Check(h, "Shield number", Yes("shield"), Get("shieldText"), Set("shieldText"), "How much it holds, at the bar's end.");
+	Check(h, "Hits and breaks", Yes("shield"), Get("shieldFx"), Set("shieldFx"), "A flicker when it's hit, a flash when it breaks.");
+
+	h.subTag = "icons";
+	Section(h, "Icons");
+	Check(h, "Skills", nil, Get("skills"), Set("skills"), "Your spells on action bar 1 to 6.");
+	Check(h, "Jewelry", nil, Get("jewelry"), Set("jewelry"), "What you wear, with its own clock where it has one.");
+	Check(h, "Buffs", nil, Get("buffs"), Set("buffs"), "What's on you, with the time left.");
+	Stepper(h, "Most buffs", Yes("buffs"), Get("buffsMax"), Set("buffsMax"), 1, 1, 24, Count);
+	Choice(h, "Side", nil, { { "below", "Below", 60 }, { "above", "Above", 60 } }, Get("iconSide"), Set("iconSide"));
+	Choice(h, "Rows", nil, { { "each", "A row each", 90 }, { "one", "All in one", 90 } }, Get("iconRows"), Set("iconRows"));
+	Choice(h, "Line up", nil, { { "left", "Left", 50 }, { "center", "Middle", 60 }, { "right", "Right", 50 } },
+		Get("iconAlign"), Set("iconAlign"));
+	Stepper(h, "Icon size", nil, Get("iconSize"), Set("iconSize"), 1, 10, 64, Px, true);
+	Stepper(h, "Gap", nil, Get("iconGap"), Set("iconGap"), 1, 0, 20, Px);
+	Check(h, "Cooldowns", nil, Get("cooldowns"), Set("cooldowns"), "When each comes back, on its icon. Off: just what you have.");
+	Check(h, "Cooldown shade", Yes("cooldowns"), Get("sweep"), Set("sweep"), "Dark over what's left of a cooldown.");
+	Check(h, "Seconds left", Yes("cooldowns"), Get("timers"), Set("timers"));
+	Check(h, "Glow when ready", Yes("cooldowns"), Get("glow"), Set("glow"));
+	Check(h, "Grey while waiting", Yes("cooldowns"), Get("grey"), Set("grey"), "A skill on cooldown in grey.");
+	HeroPicks(h);
+
+	h.subTag = "frames";
+	Section(h, "Game frames");
+	Check(h, "Hide your frame", nil, Get("hidePlayer"), function(v) S().hidePlayer = v; B.Park(); end,
+		"The game's player frame.");
+	-- the skill and jewelry icons under your frame: the game draws them itself, so they're its own
+	-- "Show Build" setting (its Interface page has it too), switched here
+	local function HasBuild() return type(AZS_SetHudShown) == "function" and type(AZS_IsHudShown) == "function"; end
+	Check(h, "Hide your skill icons", HasBuild, function() return HasBuild() and not AZS_IsHudShown("build"); end,
+		function(v)
+			if ( HasBuild() ) then
+				AZS_SetHudShown("build", not v);
+			end
+		end, "The game's skill and jewelry icons under your frame (its Show Build setting).");
+	Check(h, "Hide your buffs", nil, Get("hideBuffs"), function(v) S().hideBuffs = v; B.Park(); end,
+		"The game's buff icons by the minimap (the hero bar can show them instead).");
+	Check(h, "Hide enemy frame", nil, Get("hideTarget"), function(v) S().hideTarget = v; B.Park(); end,
+		"The frame of the enemy you target.");
+	Text(h, "/ast what", nil, function() return L("names the frame under the mouse, and what these hide"); end);
+
+	h.subTag = "bar";
+	Section(h, "Start over");
+	Actions(h, "Hero bar", nil, { { "Reset the hero bar", function()
+		Confirm(L("Every hero bar setting goes back to its default, its place too. This can't be undone."),
+			"Reset", function() B.Reset(); Refresh(); end);
+	end } });
+	Text(h, "/ast bar", nil, function() return L("shows or hides it (lock, unlock, test, reset, shield)"); end);
+	h.subTag = nil;
+	Scrolls(h, -(H - TOP - 10 - 10), 6);
+	Layout(h);
+	table.insert(h.refreshers, function() Layout(h); end);
+end
+
 
 local function BuildHeader()
 	local icon = win:CreateTexture(nil, "ARTWORK");
@@ -1835,6 +2331,7 @@ local function Build()
 	BuildPanel();
 	BuildGeneral();
 	BuildAll();
+	BuildHero();
 	-- the texts that change on their own, four times a second
 	local acc = 0;
 	win:SetScript("OnUpdate", function()
@@ -1851,11 +2348,12 @@ local function Build()
 				ShowPage(page);
 			end
 		end
-		local live = ( page == "general" and ui.general.live ) or ( page == "all" and ui.all.live ) or (selected and ui.panel.live) or {};
+		local live = ( page == "general" and ui.general.live ) or ( page == "all" and ui.all.live )
+			or ( page == "hero" and ui.hero.live ) or (selected and ui.panel.live) or {};
 		for i = 1, table.getn(live) do
 			live[i]();
 		end
-		if ( page ~= "general" and page ~= "all" and ui.paint ) then
+		if ( page ~= "general" and page ~= "all" and page ~= "hero" and ui.paint ) then
 			ui.paint();
 		end
 	end);
@@ -1867,10 +2365,19 @@ ShowPage = function(p)
 	local db, _, myClass = AST.State();
 	page = p;
 	db.ui.page = p;
-	if ( p == "general" or p == "all" ) then
+	if ( p == "general" or p == "all" or p == "hero" ) then
 		ui.list:Hide();
 		ui.panel:Hide();
-		if ( p == "general" ) then
+		ui.hero:Hide();
+		if ( p == "hero" ) then
+			ui.general:Hide();
+			ui.all:Hide();
+			ui.hero:Show();
+			ui.hero.offset = 0;
+			ui.pageIcon:SetTexture(ICONS.hero);
+			ui.pageTitle:SetText(L("Hero bar"));
+			ui.pageSub:SetText(L("Your health, shields, mana and icons on a bar of their own."));
+		elseif ( p == "general" ) then
 			ui.all:Hide();
 			ui.general:Show();
 			ui.pageIcon:SetTexture(ICONS.general);
@@ -1890,6 +2397,7 @@ ShowPage = function(p)
 	else
 		ui.general:Hide();
 		ui.all:Hide();
+		ui.hero:Hide();
 		ui.list:Show();
 		ui.panel:Show();
 		local r = AST.registry[p] or {};
@@ -1926,7 +2434,8 @@ ShowPage = function(p)
 		end
 	end
 	Refresh();
-	local live = ( p == "general" and ui.general.live ) or ( p == "all" and ui.all.live ) or (selected and ui.panel.live) or {};
+	local live = ( p == "general" and ui.general.live ) or ( p == "all" and ui.all.live ) or ( p == "hero" and ui.hero.live )
+		or (selected and ui.panel.live) or {};
 	for i = 1, table.getn(live) do
 		live[i]();
 	end
@@ -2113,7 +2622,8 @@ function AST.ToggleOptions()
 			ui.confirm:Hide();
 		end
 		win:Show();
-		ShowPage(StartPage());
+		-- the page you had open, while this game runs (only a new game starts on your class)
+		ShowPage(page or StartPage());
 	end
 end
 

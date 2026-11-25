@@ -315,14 +315,18 @@ end
 -- colour (r, g, b, a): only what changed is sent to the client (a move or resize under a third of a
 -- unit, a coordinate under 1e-5, an opacity under 0.004 are let be), as Core's pieces do. Each call
 -- costs, much more so in the browser version; a ring that holds still costs next to nothing.
-function LAB.Place(t, x, y, w, h, a1, a2, a3, a4, a5, a6, a7, a8, r, g, b, a)
+-- `tol`: how far a move or resize is let be (0.33 when left out). Pieces laid edge to edge (a big
+-- ring's arc pieces) pass a fiftieth: one updated and its neighbour not left a hairline gap between
+-- them (the user, 2026-11-25: "tiny barely perceivable gaps").
+function LAB.Place(t, x, y, w, h, a1, a2, a3, a4, a5, a6, a7, a8, r, g, b, a, tol)
 	local abs = math.abs;
-	if ( not t.lx or abs(t.lx - x) > 0.33 or abs(t.ly - y) > 0.33 ) then
+	tol = tol or 0.33;
+	if ( not t.lx or abs(t.lx - x) > tol or abs(t.ly - y) > tol ) then
 		t:ClearAllPoints();
 		t:SetPoint("BOTTOMLEFT", WorldFrame, "BOTTOMLEFT", x, y);
 		t.lx, t.ly = x, y;
 	end
-	if ( not t.lw or abs(t.lw - w) > 0.33 or abs(t.lh - h) > 0.33 ) then
+	if ( not t.lw or abs(t.lw - w) > tol or abs(t.lh - h) > tol ) then
 		t:SetWidth(w);
 		t:SetHeight(h);
 		t.lw, t.lh = w, h;

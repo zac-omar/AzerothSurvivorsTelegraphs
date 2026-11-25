@@ -1,8 +1,9 @@
 -- Azeroth Survivors Telegraphs: guardians. Around a guardian asleep at its lair, how near you can
 -- come before it wakes; around the lair of one that's chasing you, how far it follows before it
 -- gives up (both warming to red as you near their edge, with a line of text); and on the minimap,
--- pins for the guardians (and their empty lairs' timers), the bosses and the caches. All on the Any
--- class page, under "Guardians".
+-- pins for the guardians (and their empty lairs' timers), the bosses and the caches, and a ring round
+-- you as far as your chosen skill reaches, lit when a lair is within it. All on the Any class page,
+-- under "Guardians".
 --
 -- How guardians behave:
 --   * one at its lair (within 3 yd of it) wakes when it's hit, or when a hero comes within 20 yd
@@ -61,7 +62,8 @@ function G.Read()
 	for i = 1, table.getn(list) do
 		local e = list[i];
 		if ( type(e) == "table" and e.positionAvailable ~= false and type(e.x) == "number" and type(e.y) == "number"
-			and ( e.state == nil or e.state == "living" ) and Here(e, p)
+			-- (the game's state is "alive": "living" left the guardians and bosses out, 2026-11-25)
+			and ( e.state == nil or e.state == "alive" or e.state == "living" ) and Here(e, p)
 			and ( e.kind == "guardian" or e.kind == "boss" or e.kind == "finalBoss" ) ) then
 			table.insert(units, e);
 		end
@@ -159,7 +161,7 @@ local function DrawPoints(j, p, now)
 	end
 end
 
-local aggro, leash, pins;
+local aggro, leash, pins, ranger;
 
 aggro = {
 	id = "guardian_aggro", name = "Guardian wake range", shape = "world", kind = "Guardians",
@@ -252,7 +254,13 @@ pins = {
 	defaults = { enabled = true, mode = "always" },
 };
 
-AST_Register("common", { aggro, leash, pins });
+ranger = {
+	id = "minimap_range", name = "Minimap range ring", shape = "pins", kind = "Guardians", ownRows = "mmrange",
+	desc = "Your chosen skill's range round you on the minimap. It lights up when a guardian's lair is within it, so you can strike the guardian the moment it's up.",
+	defaults = { enabled = true, mode = "always" },
+};
+
+AST_Register("common", { aggro, leash, pins, ranger });
 
 ---------------------------------------------------------------------------------------------
 -- The minimap's pins
@@ -405,11 +413,393 @@ function G.UpdatePins()
 			end
 		end
 	end
+	n = G.UpdateRing(n);
 	for i = n + 1, G.shown do
 		G.icons[i]:Hide();
 		G.icons[i].timer:Hide();
 	end
 	G.shown = n;
+end
+
+---------------------------------------------------------------------------------------------
+-- The minimap's range ring: round you, how far your chosen skill reaches (each class its own
+-- skill, or a range of your own), lit when a guardian's lair is within it, so you can strike the
+-- guardian the moment it's up. Drawn under the pins, in round dots (solid or dotted).
+
+local MR = {
+	mmSkills = {}, mmOverride = 0,
+	mmEmpty = true, mmSoon = 0, mmAsleep = true, mmAwake = false, mmBosses = false,
+	mmNear = 0, mmNearC = { 1, 0.78, 0.3, 0.9 },
+	mmStyle = "solid", mmWidth = 2, mmGap = 6,
+	mmLine = { 0.75, 0.85, 1, 0.55 }, mmHot = { 0.35, 1, 0.45, 1 },
+	mmFill = false, mmFillA = 0.12, mmPulse = true, mmGrow = true, mmMark = true, mmText = false,
+	mmOnlyNear = false,
+};
+local NEAR = 50;            -- "only near a lair": shown while one is this far past the ring at most
+local MAXDOTS = 400;
+
+G.CLASSES = { "warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid" };
+G.NEAR = NEAR;
+
+-- The ring's settings, its own defaults filled in (they live with its telegraph's, so Reset and
+-- Start over put them back too).
+function G.MR()
+	local s = AST.Settings(ranger);
+	for k, v in pairs(MR) do
+		if ( s[k] == nil ) then
+			if ( type(v) == "table" ) then
+				local c = {};
+				for i, x in pairs(v) do
+					c[i] = x;
+				end
+				v = c;
+			end
+			s[k] = v;
+		end
+	end
+	return s;
+end
+
+-- What a class can take its range from: its spell range (or shot range, strike reach) first, then
+-- its skills' ranges, then the rest round you with a size. Its own rings and the flashes aren't.
+G.skillLists = {};
+function G.Skills(class)
+	local have = G.skillLists[class];
+	if ( have ) then
+		return have;
+	end
+	local r = AST.registry[class];
+	local first, reach, rest = {}, {}, {};
+	for i = 1, table.getn(r and r.defs or {}) do
+		local d = r.defs[i];
+		local id = d.id;
+		local sized = d.sizePattern or d.radius or d.radii or d.sizeOf or d.base;
+		if ( sized and ( d.shape == "circle" or d.shape == "cone" ) and not d.hidden and not d.custom
+			and not string.find(id, "_trigger$") and not string.find(id, "_cast$") ) then
+			if ( id == "range" or id == class .. "_range" ) then
+				table.insert(first, d);
+			elseif ( string.find(id, "_reach$") ) then
+				table.insert(reach, d);
+			else
+				table.insert(rest, d);
+			end
+		end
+	end
+	for i = 1, table.getn(reach) do
+		table.insert(first, reach[i]);
+	end
+	for i = 1, table.getn(rest) do
+		table.insert(first, rest[i]);
+	end
+	-- (built the first time it's asked, once every class file has registered)
+	G.skillLists[class] = first;
+	return first;
+end
+
+-- The longest range of the skills your hero has now (the class's own list; its talents' and
+-- items' effects aren't skills), and that skill: read again each time, so a skill that grows past
+-- the others takes over at once.
+function G.Longest(class)
+	local list = G.Skills(class);
+	local best, bestDef;
+	for i = 1, table.getn(list) do
+		local d = list[i];
+		if ( AST.HaveSkill(d) ) then
+			local r, how = AST.RangeOf(d);
+			-- a ring that isn't one skill's (spell range) counts only as read off one of your
+			-- skills' tooltips: its usual size alone doesn't say you have a spell that reaches it
+			if ( not d.spellKey and d.sizePattern and how ~= "tooltip" and how ~= "your override" ) then
+				r = nil;
+			end
+			if ( type(r) == "number" and r > 0 and ( not best or r > best ) ) then
+				best, bestDef = r, d;
+			end
+		end
+	end
+	return best, bestDef;
+end
+
+-- The skill a class's ring goes by: the one picked for it, else its first ("longest" picked: its
+-- first too; RangeNow and the options ask for the longest themselves).
+function G.SkillOf(class)
+	local list = G.Skills(class);
+	local want = G.MR().mmSkills[class];
+	for i = 1, table.getn(list) do
+		if ( list[i].id == want ) then
+			return list[i];
+		end
+	end
+	return list[1];
+end
+
+-- A skill's size before your Area (for another class's, which can't be read now), or nil.
+function G.BaseOf(def)
+	if ( def.sizeOf ) then
+		for c, r in pairs(AST.registry) do
+			for i = 1, table.getn(r.defs) do
+				if ( r.defs[i].id == def.sizeOf ) then
+					return G.BaseOf(r.defs[i]);
+				end
+			end
+		end
+		return nil;
+	end
+	return def.radius or def.base or ( def.radii and def.radii[1] );
+end
+
+-- The ring's range now in yd (nil: none) and the skill it's from (nil: your own range).
+function G.RangeNow()
+	local s = G.MR();
+	if ( type(s.mmOverride) == "number" and s.mmOverride > 0 ) then
+		return s.mmOverride, nil;
+	end
+	local _, _, myClass = AST.State();
+	if ( myClass and s.mmSkills[myClass] == "longest" ) then
+		return G.Longest(myClass);
+	end
+	local def = myClass and G.SkillOf(myClass);
+	if ( not def ) then
+		return nil, nil;
+	end
+	local r = AST.RangeOf(def);
+	if ( type(r) ~= "number" or r <= 0 ) then
+		return nil, def;
+	end
+	return r, def;
+end
+
+local ring = CreateFrame("Frame", "ASTRangeRing", Minimap);
+ring:SetAllPoints(Minimap);
+if ( Minimap.GetFrameLevel and ring.SetFrameLevel ) then
+	-- under the pins
+	ring:SetFrameLevel((Minimap:GetFrameLevel() or 1) + 3);
+end
+G.ring, G.dots, G.dotsShown, G.marks = ring, {}, 0, {};
+G.disc = ring:CreateTexture(nil, "BORDER");
+AST.SetPiece(G.disc, AST.round);
+G.disc:Hide();
+G.ringText = ring:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
+G.ringText:Hide();
+
+-- Dot n at x, y px from the minimap's centre: its calls only when something changed.
+local function Dot(n, x, y, w, c, a)
+	local t = G.dots[n];
+	if ( not t ) then
+		t = ring:CreateTexture(nil, "ARTWORK");
+		AST.SetPiece(t, AST.round);
+		G.dots[n] = t;
+	end
+	if ( t.x ~= x or t.y ~= y or t.w ~= w ) then
+		t:SetWidth(w);
+		t:SetHeight(w);
+		t:ClearAllPoints();
+		t:SetPoint("CENTER", ring, "CENTER", x, y);
+		t.x, t.y, t.w = x, y, w;
+	end
+	if ( t.r ~= c[1] or t.g ~= c[2] or t.b ~= c[3] or t.a ~= a ) then
+		t:SetVertexColor(c[1], c[2], c[3], a);
+		t.r, t.g, t.b, t.a = c[1], c[2], c[3], a;
+	end
+	if ( not t.on ) then
+		t:Show();
+		t.on = true;
+	end
+end
+
+-- A ring of dots `r` px round (cx, cy), from dot n + 1 on; returns the last dot's number. Solid:
+-- the dots overlap, each fainter, so together they have opacity a; else `gap` px apart.
+local function Circle(n, cx, cy, r, w, gap, solid, c, a)
+	local around = 2 * PI * r;
+	local step = solid and math.max(0.75, w * 0.5) or math.max(w + 1, gap);
+	local count = math.max(solid and 12 or 6, math.min(MAXDOTS, math.floor(around / step + 0.5)));
+	local each = a;
+	if ( solid ) then
+		local over = math.max(1, w / (around / count));
+		each = 1 - math.pow(1 - math.min(a, 0.995), 1 / over);
+	end
+	for i = 1, count do
+		local ang = 2 * PI * i / count;
+		Dot(n + i, cx + r * math.cos(ang), cy + r * math.sin(ang), w, c, each);
+	end
+	return n + count;
+end
+
+function G.HideRing()
+	for i = 1, G.dotsShown do
+		G.dots[i]:Hide();
+		G.dots[i].on = false;
+	end
+	G.dotsShown = 0;
+	G.disc:Hide();
+	G.ringText:Hide();
+	G.ringState, G.hot, G.near = nil, false, false;
+end
+
+-- What's within reach (dx, dy yd from you, north and west): in range (hot), within the early
+-- warning (near), within NEAR (close). Up to 4 in range kept, for their marks.
+local reach = { R = 0, warn = 0, hot = false, near = false, close = false, n = 0 };
+local function Take(dx, dy)
+	local d = math.sqrt(dx * dx + dy * dy);
+	if ( d <= reach.R ) then
+		reach.hot = true;
+		if ( reach.n < 4 ) then
+			reach.n = reach.n + 1;
+			G.marks[reach.n] = G.marks[reach.n] or {};
+			G.marks[reach.n][1], G.marks[reach.n][2] = dx, dy;
+		end
+	elseif ( reach.warn > 0 and d <= reach.R + reach.warn ) then
+		reach.near = true;
+	end
+	reach.close = reach.close or d <= reach.R + NEAR;
+end
+
+-- The ring, each 0.05 sec with the pins (n: the pins drawn so far; a Test press adds one of its own,
+-- a guardian you come within range of). Returns the pins drawn.
+function G.UpdateRing(n)
+	local db = AST.State();
+	local s = db and G.MR();
+	local endsAt = AST.preview and AST.preview[ranger.id];
+	local test = endsAt and GetTime() < endsAt and ( 3 - (endsAt - GetTime()) ) / 3 or nil;
+	local show = AST.showcase and AST.showcase.on and AST.showcase.Clock();
+	if ( show ) then
+		test = (show - 4 * math.floor(show / 4)) / 4;
+	end
+	local phase = type(AZS_GetPhase) == "function" and AZS_GetPhase();
+	local on = s and ( show or not db.hidden ) and ( test or ( s.enabled and phase ~= nil and phase ~= "victory" ) );
+	local R = on and G.RangeNow();
+	if ( on and test and not R ) then
+		R = 28;
+	end
+	local p = R and not test and G.Read();
+	if ( not R or not ( test or p ) ) then
+		G.HideRing();
+		return n;
+	end
+	local half = (Minimap:GetWidth() or 140) / 2;
+	local sc = half / G.Reach();
+	local pinSt = AST.Settings(pins);
+	reach.R, reach.warn, reach.hot, reach.near, reach.close, reach.n = R, s.mmNear or 0, false, false, false, 0;
+	if ( test ) then
+		-- a guardian asleep at its lair, you coming within range of it
+		local d = R + 24 - 34 * test;
+		n = Pin(n, "asleep", d * 0.8, -d * 0.6, sc, half, pinSt);
+		Take(d * 0.8, -d * 0.6);
+	else
+		local lairs = G.Lairs(p);
+		for i = 1, table.getn(lairs) do
+			local l = lairs[i];
+			local x, y, take = l.x, l.y, false;
+			if ( l.state == "empty" ) then
+				local left = G.Left(l);
+				take = s.mmEmpty and ( s.mmSoon <= 0 or left == nil or left <= s.mmSoon );
+			else
+				take = ( l.state == "awake" and s.mmAwake ) or ( l.state ~= "awake" and s.mmAsleep );
+				local u = G.UnitOf(l);
+				if ( u ) then
+					x, y = u.x, u.y;
+				end
+			end
+			if ( take ) then
+				Take(x - p.x, y - p.y);
+			end
+		end
+		if ( s.mmBosses ) then
+			for i = 1, table.getn(G.units) do
+				local e = G.units[i];
+				if ( e.kind == "boss" or e.kind == "finalBoss" ) then
+					Take(e.x - p.x, e.y - p.y);
+				end
+			end
+		end
+		if ( s.mmOnlyNear and not reach.close ) then
+			G.HideRing();
+			return n;
+		end
+	end
+	local hot, near = reach.hot, reach.near;
+	local c = ( hot and s.mmHot ) or ( near and s.mmNearC ) or s.mmLine;
+	local w = s.mmWidth * ( ( hot and s.mmGrow ) and 1.5 or 1 );
+	local r, a = R * sc, c[4];
+	if ( r > half - w ) then
+		-- past the minimap's edge (zoomed in): kept on its rim, fainter
+		r, a = half - w, a * 0.5;
+	end
+	r = math.max(3, r);
+	local solid = s.mmStyle ~= "dotted";
+	-- the ring's dots move only when its size or look does
+	local key = r .. ":" .. w .. ":" .. s.mmGap .. ":" .. tostring(solid) .. ":" .. c[1] .. ":" .. c[2] .. ":" .. c[3] .. ":" .. a;
+	local k;
+	if ( G.ringState == key ) then
+		k = G.ringDots;
+	else
+		k = Circle(0, 0, 0, r, w, s.mmGap, solid, c, a);
+		G.ringState, G.ringDots = key, k;
+	end
+	-- a ring round each pin in range
+	if ( hot and s.mmMark ) then
+		local mr = pinSt.pinSize * 0.75;
+		for i = 1, reach.n do
+			local ox, oy = -G.marks[i][2] * sc, G.marks[i][1] * sc;
+			local d, edge = math.sqrt(ox * ox + oy * oy), half - mr;
+			if ( d > edge and d > 0 ) then
+				ox, oy = ox * edge / d, oy * edge / d;
+			end
+			k = Circle(k, ox, oy, mr, 1.5, 0, true, s.mmHot, s.mmHot[4]);
+		end
+	end
+	for i = k + 1, G.dotsShown do
+		G.dots[i]:Hide();
+		G.dots[i].on = false;
+	end
+	G.dotsShown = k;
+	if ( s.mmFill ) then
+		G.disc:SetWidth(2 * r);
+		G.disc:SetHeight(2 * r);
+		G.disc:ClearAllPoints();
+		G.disc:SetPoint("CENTER", ring, "CENTER", 0, 0);
+		G.disc:SetVertexColor(c[1], c[2], c[3], s.mmFillA);
+		G.disc:Show();
+	else
+		G.disc:Hide();
+	end
+	if ( s.mmText ) then
+		G.ringText:SetText(string.format(AST_L("%g yd"), math.floor(R * 2 + 0.5) / 2));
+		G.ringText:SetTextColor(c[1], c[2], c[3], 1);
+		G.ringText:ClearAllPoints();
+		G.ringText:SetPoint("BOTTOM", ring, "CENTER", 0, math.min(r + w, half - 12));
+		G.ringText:Show();
+	else
+		G.ringText:Hide();
+	end
+	-- in range: a slow beat
+	local beat = 1;
+	if ( hot and s.mmPulse ) then
+		beat = 0.6 + 0.4 * (0.5 + 0.5 * math.sin(GetTime() * 2 * PI * 1.1));
+	end
+	ring:SetAlpha(beat);
+	G.hot, G.near, G.R = hot, near, R;
+	return n;
+end
+
+-- The game's own red flag on the nearest guardian: always hidden while you play with this addon
+-- (the pins show the guardians), shown again whenever you're not in a run: as you leave the world or
+-- log out, or out of a run. It's the game's own setting and outlives the addon, so the addon never
+-- leaves it off when it's gone: db.flagHid says the addon hid it, so it's put back even after a
+-- crash, as soon as the addon runs out of a run.
+function G.Flag(want)
+	local db = AST.State();
+	if ( not db or type(AZS_SetHudShown) ~= "function" or type(AZS_IsHudShown) ~= "function" ) then
+		return;
+	end
+	if ( want ) then
+		if ( AZS_IsHudShown("flag") ) then
+			AZS_SetHudShown("flag", false);
+		end
+		db.flagHid = true;
+	elseif ( db.flagHid ) then
+		AZS_SetHudShown("flag", true);
+		db.flagHid = nil;
+	end
 end
 
 local since = 0;
@@ -418,5 +808,20 @@ frame:SetScript("OnUpdate", function()
 	if ( since >= 0.05 ) then
 		since = 0;
 		G.UpdatePins();
+		local phase = type(AZS_GetPhase) == "function" and AZS_GetPhase();
+		-- (not for a moment after leaving: the world may still tick on its way out)
+		G.Flag(phase ~= nil and not ( G.leaving and GetTime() - G.leaving < 3 ));
+	end
+end);
+frame:RegisterEvent("PLAYER_LEAVING_WORLD");
+frame:RegisterEvent("PLAYER_LOGOUT");
+frame:RegisterEvent("PLAYER_ENTERING_WORLD");
+frame:SetScript("OnEvent", function()
+	if ( event == "PLAYER_ENTERING_WORLD" ) then
+		G.leaving = nil;
+	elseif ( event == "PLAYER_LEAVING_WORLD" or event == "PLAYER_LOGOUT" ) then
+		-- leaving the game (or reloading): the flag back on
+		G.leaving = GetTime();
+		G.Flag(false);
 	end
 end);
