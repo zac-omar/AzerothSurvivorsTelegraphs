@@ -12,7 +12,7 @@ local function RingDef(entry)
 	return {
 		id = entry.id, name = "Custom ring", custom = entry.n, shape = "circle", kind = "Other",
 		desc = "A ring of any size around you, for whatever you want to keep an eye on.",
-		defaults = { mode = "always", radius = 10, line = { c[1], c[2], c[3], 1 }, fill = { c[1], c[2], c[3], 0 } },
+		defaults = { mode = "always", radius = 10, line = { c[1], c[2], c[3], 0.5 }, fill = { c[1], c[2], c[3], 0 } },
 	};
 end
 

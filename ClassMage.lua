@@ -8,7 +8,7 @@ AST_Register("mage", {
 		tipNames = { "Frost Nova" }, sizePattern = "within ([%d%.]+) yd of you",
 		-- 10 yd x Area x (1 + 10% per Arctic Reach rank)
 		base = 10, reachTalent = "arctic_reach", reachPerRank = 0.10,
-		defaults = { mode = "cast", line = { 0.55, 0.85, 1, 1 }, fill = { 0.45, 0.75, 1, 0.3 } },
+		defaults = { mode = "cast", line = { 0.55, 0.85, 1, 0.8 }, fill = { 0.45, 0.75, 1, 0.15 } },
 	},
 	{
 		id = "arcane_explosion", name = "Arcane Explosion", shape = "circle", spellKey = "arcane_explosion",
@@ -17,7 +17,7 @@ AST_Register("mage", {
 		tipNames = { "Arcane Explosion" }, sizePattern = "within ([%d%.]+) yd of you",
 		-- 9 yd x Area x (1 + 12% per Improved Arcane Explosion rank)
 		base = 9, reachTalent = "imp_arcane_explosion", reachPerRank = 0.12,
-		defaults = { mode = "cast", line = { 0.85, 0.55, 1, 1 }, fill = { 0.75, 0.45, 1, 0.3 } },
+		defaults = { mode = "cast", line = { 0.85, 0.55, 1, 0.8 }, fill = { 0.75, 0.45, 1, 0.15 } },
 	},
 	{
 		id = "blast_wave", name = "Blast Wave", shape = "circle", spellKey = "blast_wave",
@@ -26,7 +26,7 @@ AST_Register("mage", {
 		tipNames = { "Blast Wave" }, sizePattern = "within ([%d%.]+) yd of you",
 		-- 10 yd x Area
 		base = 10,
-		defaults = { mode = "cast", line = { 1, 0.6, 0.25, 1 }, fill = { 1, 0.45, 0.1, 0.3 } },
+		defaults = { mode = "cast", line = { 1, 0.6, 0.25, 0.8 }, fill = { 1, 0.45, 0.1, 0.15 } },
 	},
 	{
 		id = "cone_of_cold", name = "Cone of Cold", shape = "cone", spellKey = "cone_of_cold",
@@ -36,7 +36,7 @@ AST_Register("mage", {
 		tipNames = { "Cone of Cold" }, sizePattern = "([%d%.]+) yd cone",
 		-- 12 yd x Area x (1 + 10% per Arctic Reach rank)
 		base = 12, reachTalent = "arctic_reach", reachPerRank = 0.10,
-		defaults = { mode = "cast", line = { 0.65, 0.9, 1, 1 }, fill = { 0.5, 0.8, 1, 0.3 } },
+		defaults = { mode = "cast", line = { 0.65, 0.9, 1, 0.8 }, fill = { 0.5, 0.8, 1, 0.15 } },
 	},
 	{
 		-- "Lands on the thickest group of enemies within 30 yd: every enemy within 9 yd of that spot
@@ -48,7 +48,7 @@ AST_Register("mage", {
 		-- 9 yd x Area x (1 + 10% per Arctic Reach rank), for 9.8 sec, a tick every second
 		areaItem = "item/blizzard", durationItem = "item/blizzard",
 		base = 9, reachTalent = "arctic_reach", reachPerRank = 0.10, duration = 9.8, every = 1, recDuration = 7,
-		defaults = { mode = "duration", line = { 0.6, 0.85, 1, 1 }, fill = { 0.5, 0.75, 1, 0.25 } },
+		defaults = { mode = "duration", line = { 0.6, 0.85, 1, 0.65 }, fill = { 0.5, 0.75, 1, 0.12 } },
 	},
 	{
 		-- "Lands on the thickest group of enemies within 30 yd: every enemy within 8 yd of that spot
@@ -60,7 +60,7 @@ AST_Register("mage", {
 		-- 8 yd x Area, for 8.4 sec, a tick every 2.1 sec
 		areaItem = "item/flamestrike", durationItem = "item/flamestrike",
 		base = 8, duration = 8.4, every = 2.1, recDuration = 6,
-		defaults = { mode = "duration", line = { 1, 0.55, 0.2, 1 }, fill = { 1, 0.4, 0.1, 0.25 } },
+		defaults = { mode = "duration", line = { 1, 0.55, 0.2, 0.65 }, fill = { 1, 0.4, 0.1, 0.12 } },
 	},
 	{
 		-- "Your spells have a 12% chance to turn the enemy they hit into a sheep ... the next hit on
@@ -72,7 +72,7 @@ AST_Register("mage", {
 		on = { spells = { 118 }, names = { "polymorph" } },
 		tipNames = { "Polymorph" }, sizePattern = "on every enemy within ([%d%.]+) yd",
 		base = 7, areaItem = "item/polymorph",
-		defaults = { mode = "event", flash = 0.5, line = { 0.9, 0.6, 1, 1 }, fill = { 0.8, 0.5, 1, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 0.9, 0.6, 1, 0.8 }, fill = { 0.8, 0.5, 1, 0.15 } },
 	},
 	{
 		-- Arcane Concentration (Arcane milestone): "every spell you cast has a 30% chance to set off a
@@ -82,7 +82,7 @@ AST_Register("mage", {
 		match = { "arcaneconcentration" }, talentKeys = { "arcaneconcentration" },
 		needName = "the Arcane Concentration talent",
 		free = { spells = { 1449 }, names = { "arcaneexplosion" }, ownSpell = "arcane_explosion" },
-		defaults = { mode = "proc", line = { 0.95, 0.75, 1, 1 }, fill = { 0.85, 0.6, 1, 0.3 } },
+		defaults = { mode = "proc", line = { 0.95, 0.75, 1, 0.8 }, fill = { 0.85, 0.6, 1, 0.15 } },
 	},
 	{
 		-- Summon Water Elemental (Frost capstone): "a free Frost Nova bursts from you every 8 sec",
@@ -94,7 +94,7 @@ AST_Register("mage", {
 		clock = { names = { "Summon Water Elemental", "Water Elemental" }, every = 8 },
 		free = { spells = { 122 }, names = { "frostnova" }, ownSpell = "frost_nova" },
 		modes = { "proc", "cooldown" },
-		defaults = { mode = "cooldown", line = { 0.45, 0.75, 1, 1 }, fill = { 0.35, 0.65, 1, 0.15 } },
+		defaults = { mode = "cooldown", line = { 0.45, 0.75, 1, 0.6 }, fill = { 0.35, 0.65, 1, 0.12 } },
 	},
 	{
 		-- Pyroclasm (Fire capstone): "enemies killed by your Fire spells explode for 25% of their
@@ -105,7 +105,7 @@ AST_Register("mage", {
 		-- your Fire spells: Fireball, Fire Blast, Pyroblast, Flamestrike, Blast Wave, and Ignite's burn
 		by = { spells = { 133, 2136, 11366, 2120, 11113, 12654 },
 			names = { "fireball", "fireblast", "pyroblast", "flamestrike", "blastwave", "ignite" } },
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.5, 0.15, 1 }, fill = { 1, 0.4, 0.05, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.5, 0.15, 0.8 }, fill = { 1, 0.4, 0.05, 0.15 } },
 	},
 	{
 		-- Splitting Ice (Frost milestone): "Frostbolt splinters on impact: ... every enemy within 5 yd
@@ -114,7 +114,7 @@ AST_Register("mage", {
 		desc = "With Splitting Ice, each Frostbolt splinters where it lands: the area the splinters strike.",
 		match = { "splittingice" }, talentKeys = { "splittingice" },
 		on = { spells = { 116 }, names = { "frostbolt" } },
-		defaults = { mode = "event", flash = 0.4, line = { 0.7, 0.92, 1, 1 }, fill = { 0.55, 0.85, 1, 0.2 } },
+		defaults = { mode = "event", flash = 0.4, line = { 0.7, 0.92, 1, 0.8 }, fill = { 0.55, 0.85, 1, 0.15 } },
 	},
 	{
 		-- The Amulet of the Inferno on Blizzard: "Enemies Blizzard kills explode for 30% of their max
@@ -123,7 +123,7 @@ AST_Register("mage", {
 		desc = "With the Amulet of the Inferno on Blizzard, enemies Blizzard kills explode: where they do.",
 		match = { "item/blizzard" }, needName = "the Amulet of the Inferno (Blizzard)",
 		by = { spells = { 10 }, names = { "blizzard" } },
-		defaults = { mode = "event", flash = 0.5, line = { 0.6, 0.85, 1, 1 }, fill = { 0.45, 0.75, 1, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 0.6, 0.85, 1, 0.8 }, fill = { 0.45, 0.75, 1, 0.15 } },
 	},
 	{
 		-- The Amulet of the Inferno on Flamestrike: "Enemies Flamestrike kills explode for 30% of their
@@ -132,7 +132,7 @@ AST_Register("mage", {
 		desc = "With the Amulet of the Inferno on Flamestrike, enemies Flamestrike kills explode: where they do.",
 		match = { "item/flamestrike" }, needName = "the Amulet of the Inferno (Flamestrike)",
 		by = { spells = { 2120 }, names = { "flamestrike" } },
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.55, 0.2, 1 }, fill = { 1, 0.4, 0.1, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.55, 0.2, 0.8 }, fill = { 1, 0.4, 0.1, 0.15 } },
 	},
 	{
 		-- The Eternal Talisman on Ice Barrier: "A broken shield bursts for 50% of what it absorbed on
@@ -142,7 +142,7 @@ AST_Register("mage", {
 		buffSpells = { 11426 },
 		match = { "item/icebarrier" }, radii = { ["item/icebarrier"] = 10 },
 		needName = "The Eternal Talisman (Ice Barrier)",
-		defaults = { mode = "shield", line = { 0.7, 0.9, 1, 1 }, fill = { 0.6, 0.85, 1, 0.12 } },
+		defaults = { mode = "shield", line = { 0.7, 0.9, 1, 0.8 }, fill = { 0.6, 0.85, 1, 0.1 } },
 	},
 	{
 		-- How far your targeted spells look for enemies.
@@ -150,7 +150,7 @@ AST_Register("mage", {
 		desc = "How far your targeted spells reach for an enemy.",
 		tipNames = { "Fireball", "Frostbolt", "Arcane Missiles", "Pyroblast" },
 		sizePattern = "within ([%d%.]+) yd", base = 30, unscaled = true,
-		defaults = { enabled = false, mode = "always", line = { 0.55, 0.8, 1, 0.6 }, fill = { 0.55, 0.8, 1, 0 } },
+		defaults = { enabled = false, mode = "always", line = { 0.55, 0.8, 1, 0.45 }, fill = { 0.55, 0.8, 1, 0 } },
 	},
 }, {
 	icon = "Interface\\Icons\\Spell_Frost_IceStorm",

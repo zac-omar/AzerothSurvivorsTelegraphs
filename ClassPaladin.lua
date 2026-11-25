@@ -8,7 +8,7 @@ AST_Register("paladin", {
 		tipNames = { "Holy Wrath" }, sizePattern = "within ([%d%.]+) yd of you",
 		-- 12 yd x Area x (1 + 8% per Purifying Power rank)
 		base = 12, reachTalent = "purifying_power", reachPerRank = 0.08,
-		defaults = { mode = "cast", line = { 1, 0.85, 0.4, 1 }, fill = { 1, 0.8, 0.3, 0.3 } },
+		defaults = { mode = "cast", line = { 1, 0.85, 0.4, 0.8 }, fill = { 1, 0.8, 0.3, 0.15 } },
 	},
 	{
 		-- "Marks the ground where you stand once enemies come within 8 yd: every enemy within 8 yd of
@@ -20,7 +20,7 @@ AST_Register("paladin", {
 		tipNames = { "Consecration" }, sizePattern = "within ([%d%.]+) yd of that spot", durationPattern = "of that spot.-for ([%d%.]+) sec",
 		areaItem = "item/consecration", durationItem = "item/consecration",
 		base = 8, reachTalent = "purifying_power", reachPerRank = 0.08, duration = 11, every = 1, recDuration = 8,
-		defaults = { mode = "duration", line = { 1, 0.9, 0.5, 1 }, fill = { 1, 0.85, 0.4, 0.25 } },
+		defaults = { mode = "duration", line = { 1, 0.9, 0.5, 0.65 }, fill = { 1, 0.85, 0.4, 0.12 } },
 	},
 	{
 		-- Hallowed Ground (Protection milestone): "Every Hammer of Justice that lands hallows the
@@ -36,7 +36,7 @@ AST_Register("paladin", {
 		base = 8, reachTalent = "purifying_power", reachPerRank = 0.08, duration = 11, every = 1, recDuration = 8,
 		match = { "hallowedground", "divineintervention" }, talentKeys = { "hallowedground", "divineintervention" },
 		needName = "the Hallowed Ground or Divine Intervention talent",
-		defaults = { mode = "duration", line = { 1, 0.95, 0.65, 1 }, fill = { 1, 0.9, 0.55, 0.25 } },
+		defaults = { mode = "duration", line = { 1, 0.95, 0.65, 0.65 }, fill = { 1, 0.9, 0.55, 0.12 } },
 	},
 	{
 		-- Redemption (an ability from the spell pool): "Enemies you slay have a 10% chance to burst
@@ -50,7 +50,7 @@ AST_Register("paladin", {
 		match = { "redemption" }, talentKeys = { "redemption" }, needName = "the Redemption ability",
 		desc = "With Redemption, enemies you slay can burst in holy light: where a burst goes off.",
 		on = { spells = { 7328 }, names = { "redemption" } },
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.95, 0.6, 1 }, fill = { 1, 0.9, 0.5, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.95, 0.6, 0.8 }, fill = { 1, 0.9, 0.5, 0.15 } },
 	},
 	{
 		-- Light's Grace (Holy capstone): "A Holy Wrath bursts from you on its own every 14 sec."
@@ -61,7 +61,7 @@ AST_Register("paladin", {
 		clock = { names = { "Light's Grace" }, every = 14 },
 		free = { spells = { 2812 }, names = { "holywrath" }, ownSpell = "holy_wrath", unless = "daybreak" },
 		modes = { "proc", "cooldown" },
-		defaults = { mode = "cooldown", line = { 1, 0.95, 0.55, 1 }, fill = { 1, 0.9, 0.45, 0.18 } },
+		defaults = { mode = "cooldown", line = { 1, 0.95, 0.55, 0.6 }, fill = { 1, 0.9, 0.45, 0.12 } },
 	},
 	{
 		-- Daybreak (Holy milestone): "Holy Shock's critical strikes call down a free Holy Wrath
@@ -72,7 +72,7 @@ AST_Register("paladin", {
 		needName = "the Daybreak talent (spotted at its first free Holy Wrath after a Holy Shock crit)",
 		procOn = { spells = { 25912 }, names = { "holyshock" }, crit = true, gap = 3 },
 		spot = { spells = { 2812 }, names = { "holywrath" }, ownSpell = "holy_wrath", window = 0.6 },
-		defaults = { mode = "proc", line = { 1, 1, 0.75, 1 }, fill = { 1, 0.95, 0.6, 0.3 } },
+		defaults = { mode = "proc", line = { 1, 1, 0.75, 0.8 }, fill = { 1, 0.95, 0.6, 0.15 } },
 	},
 	{
 		-- Divine Storm (Retribution capstone): "every Exorcism bursts on its target, striking every
@@ -81,7 +81,7 @@ AST_Register("paladin", {
 		desc = "With Divine Storm, every Exorcism bursts on its target: the area it strikes.",
 		match = { "divinestorm" }, talentKeys = { "divinestorm" },
 		on = { spells = { 879 }, names = { "exorcism" } },
-		defaults = { mode = "event", flash = 0.4, line = { 1, 0.8, 0.45, 1 }, fill = { 1, 0.7, 0.3, 0.25 } },
+		defaults = { mode = "event", flash = 0.4, line = { 1, 0.8, 0.45, 0.8 }, fill = { 1, 0.7, 0.3, 0.15 } },
 	},
 	{
 		-- The Amulet of the Inferno on Consecration: enemies it kills explode for 30% of their max
@@ -90,7 +90,7 @@ AST_Register("paladin", {
 		desc = "With the Amulet of the Inferno on Consecration, enemies Consecration kills explode: where they do.",
 		match = { "item/consecration" }, needName = "the Amulet of the Inferno (Consecration)",
 		by = { spells = { 26573 }, names = { "consecration" } },
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.75, 0.35, 1 }, fill = { 1, 0.65, 0.2, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.75, 0.35, 0.8 }, fill = { 1, 0.65, 0.2, 0.15 } },
 	},
 	{
 		-- The Epic armor set's 8 pieces (each at 3 stars or more): "Enemies killed by Judgement
@@ -102,7 +102,7 @@ AST_Register("paladin", {
 		on = { source = "^set:paladin%.3" }, by = { spells = { 20271 } },
 		match = { "set/epic/paladin/5", "set/epic/paladin" }, talentKeys = { "set/epic/paladin/5", "set/epic/paladin" }, showsItself = true,
 		needName = "the Epic paladin set's 8 pieces at 3 stars or more",
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.85, 0.4, 1 }, fill = { 1, 0.75, 0.25, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.85, 0.4, 0.8 }, fill = { 1, 0.75, 0.25, 0.15 } },
 	},
 	{
 		-- The T0.5 armor set's 8 pieces: "Hammer of Justice ... explodes for 40% of your remaining
@@ -114,7 +114,7 @@ AST_Register("paladin", {
 		match = { "set/t05/paladin" }, talentKeys = { "set/t05/paladin" },
 		needName = "the T0.5 paladin set's 8 pieces (known from its first explosion)",
 		on = { spells = { 853 }, names = { "hammerofjustice" } },
-		defaults = { mode = "event", flash = 0.45, line = { 1, 0.9, 0.55, 1 }, fill = { 1, 0.85, 0.45, 0.2 } },
+		defaults = { mode = "event", flash = 0.45, line = { 1, 0.9, 0.55, 0.8 }, fill = { 1, 0.85, 0.45, 0.15 } },
 	},
 	{
 		-- How far your targeted spells reach for an enemy.
@@ -122,13 +122,13 @@ AST_Register("paladin", {
 		desc = "How far your targeted spells reach for an enemy.",
 		tipNames = { "Exorcism", "Hammer of Wrath", "Holy Shock", "Judgement" },
 		sizePattern = "within ([%d%.]+) yd", base = 25, unscaled = true,
-		defaults = { enabled = false, mode = "always", line = { 0.96, 0.55, 0.73, 0.6 }, fill = { 0.96, 0.55, 0.73, 0 } },
+		defaults = { enabled = false, mode = "always", line = { 0.96, 0.55, 0.73, 0.45 }, fill = { 0.96, 0.55, 0.73, 0 } },
 	},
 	{
 		-- How far your auto-attack swings reach: 6 yd, centre to centre (nothing changes it).
 		id = "paladin_melee", name = "Melee range", shape = "circle", radius = 6, sizeLabel = "swing reach",
 		desc = "How far your melee swings reach for an enemy.",
-		defaults = { enabled = false, mode = "always", line = { 1, 0.45, 0.3, 0.6 }, fill = { 1, 0.45, 0.3, 0 } },
+		defaults = { enabled = false, mode = "always", line = { 1, 0.45, 0.3, 0.45 }, fill = { 1, 0.45, 0.3, 0 } },
 	},
 }, {
 	icon = "Interface\\Icons\\Spell_Holy_HolyBolt",

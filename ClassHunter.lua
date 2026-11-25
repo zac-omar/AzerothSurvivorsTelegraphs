@@ -8,7 +8,7 @@ local function Inferno(key, name, spell)
 		desc = "With the Amulet of the Inferno on " .. name .. ", enemies " .. name .. " kills explode: where they do.",
 		match = { "item/" .. key }, needName = "the Amulet of the Inferno (" .. name .. ")",
 		by = { spells = { spell }, names = { key } },
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.6, 0.25, 1 }, fill = { 1, 0.45, 0.1, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.6, 0.25, 0.8 }, fill = { 1, 0.45, 0.1, 0.15 } },
 	};
 end
 
@@ -22,7 +22,7 @@ AST_Register("hunter", {
 		tipNames = { "Volley" }, sizePattern = "within ([%d%.]+) yd of that spot", durationPattern = "of that spot.-for ([%d%.]+) sec",
 		areaItem = "item/volley", durationItem = "item/volley",
 		base = 8, duration = 8.4, every = 1, recDuration = 6,
-		defaults = { mode = "duration", line = { 0.85, 0.6, 1, 1 }, fill = { 0.7, 0.45, 1, 0.25 } },
+		defaults = { mode = "duration", line = { 0.85, 0.6, 1, 0.65 }, fill = { 0.7, 0.45, 1, 0.12 } },
 	},
 	{
 		-- "Marks the ground where you stand once enemies come within 7 yd: every enemy within 7 yd of
@@ -33,7 +33,7 @@ AST_Register("hunter", {
 		tipNames = { "Immolation Trap" }, sizePattern = "within ([%d%.]+) yd of that spot", durationPattern = "of that spot.-for ([%d%.]+) sec",
 		areaItem = "item/immolationtrap", durationItem = "item/immolationtrap",
 		base = 7, duration = 11, every = 1.9, recDuration = 8,
-		defaults = { mode = "duration", line = { 1, 0.5, 0.15, 1 }, fill = { 1, 0.35, 0.05, 0.25 } },
+		defaults = { mode = "duration", line = { 1, 0.5, 0.15, 0.65 }, fill = { 1, 0.35, 0.05, 0.12 } },
 	},
 	{
 		-- "Marks the ground where you stand once enemies come within 10 yd: every enemy within 10 yd
@@ -44,7 +44,7 @@ AST_Register("hunter", {
 		tipNames = { "Frost Trap" }, sizePattern = "within ([%d%.]+) yd of that spot", durationPattern = "of that spot.-for ([%d%.]+) sec",
 		areaItem = "item/frosttrap", durationItem = "item/frosttrap",
 		base = 10, duration = 8.4, every = 2.1, recDuration = 6,
-		defaults = { mode = "duration", line = { 0.55, 0.85, 1, 1 }, fill = { 0.45, 0.75, 1, 0.25 } },
+		defaults = { mode = "duration", line = { 0.55, 0.85, 1, 0.65 }, fill = { 0.45, 0.75, 1, 0.12 } },
 	},
 	{
 		-- Wyvern Sting (Survival capstone): "an Immolation Trap sets itself at your feet every 5 sec";
@@ -59,7 +59,7 @@ AST_Register("hunter", {
 		base = 7, duration = 11, every = 1.9, recDuration = 8,
 		match = { "wyvernsting", "counterattack" }, talentKeys = { "wyvernsting", "counterattack" },
 		needName = "the Wyvern Sting or Counterattack talent",
-		defaults = { mode = "duration", line = { 1, 0.65, 0.3, 1 }, fill = { 1, 0.5, 0.15, 0.25 } },
+		defaults = { mode = "duration", line = { 1, 0.65, 0.3, 0.65 }, fill = { 1, 0.5, 0.15, 0.12 } },
 	},
 	{
 		-- Hunter's Mark (an ability from the spell pool): "When it dies the mark explodes, dealing ...
@@ -73,7 +73,7 @@ AST_Register("hunter", {
 		on = { spells = { 1130 }, names = { "huntersmark" } },
 		tipNames = { "Hunter's Mark" }, sizePattern = "every enemy within ([%d%.]+) yd",
 		base = 8, areaItem = "item/huntersmark",
-		defaults = { mode = "event", flash = 0.5, line = { 0.75, 0.55, 1, 1 }, fill = { 0.6, 0.4, 1, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 0.75, 0.55, 1, 0.8 }, fill = { 0.6, 0.4, 1, 0.15 } },
 	},
 	{
 		-- Explosive Ammunition (Survival milestone): "Enemies killed by your Auto Shot or Multi-Shot
@@ -82,7 +82,7 @@ AST_Register("hunter", {
 		desc = "With Explosive Ammunition, enemies your Auto Shot or Multi-Shot kills explode: where they do.",
 		match = { "explosiveammo", "explosiveammunition" }, talentKeys = { "explosiveammo", "explosiveammunition" },
 		by = { spells = { 75, 2643 }, names = { "autoshot", "multishot" } },
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.6, 0.25, 1 }, fill = { 1, 0.45, 0.1, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.6, 0.25, 0.8 }, fill = { 1, 0.45, 0.1, 0.15 } },
 	},
 	{
 		-- The Pendant of the Plague on Serpent Sting: enemies that die with it on them explode for 20%
@@ -91,7 +91,7 @@ AST_Register("hunter", {
 		desc = "With the Pendant of the Plague on Serpent Sting, enemies that die with your Serpent Sting on them explode: where they do.",
 		match = { "item/serpentsting" }, needs = { ["item/serpentsting"] = "serpentsting" },
 		needName = "the Pendant of the Plague (Serpent Sting)",
-		defaults = { mode = "event", flash = 0.5, line = { 0.55, 1, 0.35, 1 }, fill = { 0.4, 0.9, 0.2, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 0.55, 1, 0.35, 0.8 }, fill = { 0.4, 0.9, 0.2, 0.15 } },
 	},
 	Inferno("volley", "Volley", 1510),
 	Inferno("immolationtrap", "Immolation Trap", 13797),
@@ -102,7 +102,7 @@ AST_Register("hunter", {
 		desc = "How far your shots reach for an enemy.",
 		tipNames = { "Auto Shot", "Arcane Shot", "Multi-Shot", "Aimed Shot" },
 		sizePattern = "within ([%d%.]+) yd", base = 32, unscaled = true,
-		defaults = { enabled = false, mode = "always", line = { 0.67, 0.83, 0.45, 0.6 }, fill = { 0.67, 0.83, 0.45, 0 } },
+		defaults = { enabled = false, mode = "always", line = { 0.67, 0.83, 0.45, 0.45 }, fill = { 0.67, 0.83, 0.45, 0 } },
 	},
 }, {
 	icon = "Interface\\Icons\\INV_Weapon_Bow_07",

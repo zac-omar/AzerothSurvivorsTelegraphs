@@ -10,7 +10,7 @@ AST_Register("priest", {
 		tipNames = { "Mind Flay" }, sizePattern = "([%d%.]+) yd cone",
 		-- 16 yd x Area x (1 + 10% per Shadow Reach rank); misses Mind Flay's own "+% area" upgrades
 		base = 16, reachTalent = "shadow_reach", reachPerRank = 0.10,
-		defaults = { mode = "cooldown", line = { 0.75, 0.45, 1, 1 }, fill = { 0.55, 0.25, 0.95, 0.3 } },
+		defaults = { mode = "cooldown", line = { 0.75, 0.45, 1, 0.6 }, fill = { 0.55, 0.25, 0.95, 0.12 } },
 	},
 	{
 		id = "holy_nova", name = "Holy Nova", shape = "circle", spellKey = "holy_nova",
@@ -19,7 +19,7 @@ AST_Register("priest", {
 		tipNames = { "Holy Nova" }, sizePattern = "within ([%d%.]+) yd of you",
 		-- 10 yd x Area x (1 + 10% per Holy Reach rank). Chastise's free novas are the same size.
 		base = 10, reachTalent = "holy_reach", reachPerRank = 0.10,
-		defaults = { mode = "cast", line = { 1, 0.85, 0.35, 1 }, fill = { 1, 0.8, 0.3, 0.3 } },
+		defaults = { mode = "cast", line = { 1, 0.85, 0.35, 0.8 }, fill = { 1, 0.8, 0.3, 0.15 } },
 	},
 	{
 		-- Chastise (Holy capstone): a Smite cast that crits sets off a free Holy Nova. Your hero
@@ -30,7 +30,7 @@ AST_Register("priest", {
 		needName = "the Chastise talent (spotted at its first free nova after a Smite crit)",
 		procOn = { spells = { 585 }, names = { "smite" }, crit = true, gap = 0.25 },
 		spot = { spells = { 15237 }, names = { "holynova" }, ownSpell = "holy_nova", window = 0.6 },
-		defaults = { mode = "proc", line = { 1, 1, 0.8, 1 }, fill = { 1, 0.95, 0.6, 0.3 } },
+		defaults = { mode = "proc", line = { 1, 1, 0.8, 0.8 }, fill = { 1, 0.95, 0.6, 0.15 } },
 	},
 	{
 		-- Radiance (Holy milestone): "A Holy Nova bursts from you on its own every 24 sec." Timed by
@@ -46,7 +46,7 @@ AST_Register("priest", {
 		clock = { names = { "Radiance" }, every = 24 },
 		free = { spells = { 15237 }, names = { "holynova" }, ownSpell = "holy_nova", unless = "chastise" },
 		modes = { "proc", "cooldown" },
-		defaults = { mode = "cooldown", line = { 1, 0.95, 0.55, 1 }, fill = { 1, 0.9, 0.45, 0.18 } },
+		defaults = { mode = "cooldown", line = { 1, 0.95, 0.55, 0.6 }, fill = { 1, 0.9, 0.45, 0.12 } },
 	},
 	{
 		id = "psychic_scream", name = "Psychic Scream", shape = "circle", spellKey = "psychic_scream",
@@ -54,7 +54,7 @@ AST_Register("priest", {
 		modes = { "cast", "cooldown" },
 		tipNames = { "Psychic Scream" }, sizePattern = "within ([%d%.]+) yd of you",
 		base = 10,
-		defaults = { mode = "cast", line = { 0.9, 0.35, 0.85, 1 }, fill = { 0.65, 0.2, 0.75, 0.3 } },
+		defaults = { mode = "cast", line = { 0.9, 0.35, 0.85, 0.8 }, fill = { 0.65, 0.2, 0.75, 0.15 } },
 	},
 	{
 		-- Divine Aegis: a shield on you that breaks strikes every enemy within 10 yd. The Eternal
@@ -68,7 +68,7 @@ AST_Register("priest", {
 		talentKeys = { "divineaegis", "set/uncommon/priest" },
 		radii = { divineaegis = 10, ["item/pwshield"] = 10, ["set/uncommon/priest"] = 8, ["set/pwshield"] = 8 },
 		needName = "Divine Aegis, The Eternal Talisman (Power Word: Shield) or its set",
-		defaults = { mode = "shield", line = { 1, 1, 0.65, 1 }, fill = { 1, 1, 0.75, 0.12 } },
+		defaults = { mode = "shield", line = { 1, 1, 0.65, 0.8 }, fill = { 1, 1, 0.75, 0.1 } },
 	},
 	{
 		-- How far your targeted spells look for enemies.
@@ -76,7 +76,7 @@ AST_Register("priest", {
 		desc = "How far your targeted spells reach for an enemy.",
 		tipNames = { "Smite", "Mind Blast", "Holy Fire", "Shadow Word: Pain", "Devouring Plague" },
 		sizePattern = "within ([%d%.]+) yd", base = 28, unscaled = true,
-		defaults = { enabled = false, mode = "always", line = { 0.55, 0.8, 1, 0.6 }, fill = { 0.55, 0.8, 1, 0 } },
+		defaults = { enabled = false, mode = "always", line = { 0.55, 0.8, 1, 0.45 }, fill = { 0.55, 0.8, 1, 0 } },
 	},
 	{
 		-- "Enemies that die with Shadow Word: Pain (or Devouring Plague) on them explode for 20% of
@@ -86,7 +86,7 @@ AST_Register("priest", {
 		match = { "item/swpain", "item/devouringplague", "pendantoftheplague" },
 		needs = { ["item/swpain"] = "swp", ["item/devouringplague"] = "dp", pendantoftheplague = "any" },
 		radius = 7,
-		defaults = { mode = "event", flash = 0.5, line = { 0.55, 1, 0.35, 1 }, fill = { 0.4, 0.9, 0.2, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 0.55, 1, 0.35, 0.8 }, fill = { 0.4, 0.9, 0.2, 0.15 } },
 	},
 	{
 		-- Shadowform (capstone): "when an enemy dies with Shadow Word: Pain on it, it bursts for 4%
@@ -94,7 +94,7 @@ AST_Register("priest", {
 		id = "shadowform", name = "Shadowform burst", shape = "enemy", trigger = "kill",
 		desc = "With the Shadowform capstone, enemies that die with your Shadow Word: Pain burst: where they do.",
 		match = { "shadowform" }, talentKeys = { "shadowform" }, needs = { shadowform = "swp" }, radius = 6,
-		defaults = { mode = "event", flash = 0.5, line = { 0.6, 0.35, 1, 1 }, fill = { 0.45, 0.2, 0.8, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 0.6, 0.35, 1, 0.8 }, fill = { 0.45, 0.2, 0.8, 0.15 } },
 	},
 }, {
 	icon = "Interface\\Icons\\Spell_Holy_PowerWordShield",

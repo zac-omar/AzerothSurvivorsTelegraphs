@@ -7,7 +7,7 @@ local function Reaper(key, name, spell)
 		desc = "With The Reaper's Amulet on " .. name .. ", each " .. name .. " hit splashes onto the enemies around its target: the area it splashes.",
 		match = { "item/" .. key }, needName = "The Reaper's Amulet (" .. name .. ")",
 		on = { spells = { spell }, names = { key } },
-		defaults = { mode = "event", flash = 0.4, line = { 0.85, 0.3, 0.3, 1 }, fill = { 0.75, 0.2, 0.2, 0.2 } },
+		defaults = { mode = "event", flash = 0.4, line = { 0.85, 0.3, 0.3, 0.8 }, fill = { 0.75, 0.2, 0.2, 0.15 } },
 	};
 end
 
@@ -18,7 +18,7 @@ AST_Register("rogue", {
 		modes = { "cast", "cooldown" },
 		tipNames = { "Blade Flurry" }, sizePattern = "within ([%d%.]+) yd of you",
 		base = 7,
-		defaults = { mode = "cast", line = { 1, 0.95, 0.45, 1 }, fill = { 1, 0.9, 0.3, 0.3 } },
+		defaults = { mode = "cast", line = { 1, 0.95, 0.45, 0.8 }, fill = { 1, 0.9, 0.3, 0.15 } },
 	},
 	{
 		-- Preparation (Subtlety milestone): "A free Gouge stuns the enemies around you every 6 sec."
@@ -31,7 +31,7 @@ AST_Register("rogue", {
 		clock = { names = { "Preparation" }, every = 6 },
 		free = { spells = { 1776 }, names = { "gouge" }, ownSpell = "gouge" },
 		modes = { "proc", "cooldown" },
-		defaults = { mode = "cooldown", line = { 0.95, 0.85, 0.5, 1 }, fill = { 0.9, 0.75, 0.35, 0.18 } },
+		defaults = { mode = "cooldown", line = { 0.95, 0.85, 0.5, 0.6 }, fill = { 0.9, 0.75, 0.35, 0.12 } },
 	},
 	{
 		-- Shadow Dance (Subtlety capstone): "Backstab and Eviscerate splash 20% of their damage onto
@@ -40,7 +40,7 @@ AST_Register("rogue", {
 		desc = "With Shadow Dance, Backstab and Eviscerate splash onto the enemies around their target: the area they splash.",
 		match = { "shadowdance" }, talentKeys = { "shadowdance" },
 		on = { spells = { 53, 2098 }, names = { "backstab", "eviscerate" } },
-		defaults = { mode = "event", flash = 0.4, line = { 0.75, 0.55, 1, 1 }, fill = { 0.6, 0.4, 0.95, 0.2 } },
+		defaults = { mode = "event", flash = 0.4, line = { 0.75, 0.55, 1, 0.8 }, fill = { 0.6, 0.4, 0.95, 0.15 } },
 	},
 	{
 		-- Toxic Bloom (Assassination capstone): "Enemies that die poisoned or bleeding burst in a
@@ -49,7 +49,7 @@ AST_Register("rogue", {
 		id = "toxic_bloom", name = "Toxic Bloom", shape = "enemy", trigger = "kill", radius = 7,
 		desc = "With Toxic Bloom, enemies that die bleeding from your Rupture burst in a toxic cloud: where they do.",
 		match = { "toxicbloom" }, talentKeys = { "toxicbloom" }, needs = { toxicbloom = "rupture" },
-		defaults = { mode = "event", flash = 0.5, line = { 0.55, 1, 0.35, 1 }, fill = { 0.4, 0.9, 0.2, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 0.55, 1, 0.35, 0.8 }, fill = { 0.4, 0.9, 0.2, 0.15 } },
 	},
 	{
 		-- The Pendant of the Plague on Rupture: enemies that die with it on them explode for 20% of
@@ -58,7 +58,7 @@ AST_Register("rogue", {
 		desc = "With the Pendant of the Plague on Rupture, enemies that die with your Rupture on them explode: where they do.",
 		match = { "item/rupture" }, needs = { ["item/rupture"] = "rupture" },
 		needName = "the Pendant of the Plague (Rupture)",
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.35, 0.35, 1 }, fill = { 0.9, 0.2, 0.2, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.35, 0.35, 0.8 }, fill = { 0.9, 0.2, 0.2, 0.15 } },
 	},
 	{
 		-- The Uncommon armor set's 8 pieces (each at 3 stars or more): "Enemies dying with your
@@ -71,7 +71,7 @@ AST_Register("rogue", {
 		needs = { ["set/uncommon/rogue/5"] = "rupture", ["set/uncommon/rogue"] = "rupture" },
 		match = { "set/uncommon/rogue/5", "set/uncommon/rogue" }, talentKeys = { "set/uncommon/rogue/5", "set/uncommon/rogue" }, showsItself = true,
 		needName = "the Uncommon rogue set's 8 pieces at 3 stars or more",
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.45, 0.4, 1 }, fill = { 0.9, 0.3, 0.25, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.45, 0.4, 0.8 }, fill = { 0.9, 0.3, 0.25, 0.15 } },
 	},
 	Reaper("eviscerate", "Eviscerate", 2098),
 	Reaper("backstab", "Backstab", 53),
@@ -81,13 +81,13 @@ AST_Register("rogue", {
 		desc = "How far your strikes reach for an enemy.",
 		tipNames = { "Sinister Strike", "Backstab", "Eviscerate", "Kidney Shot" },
 		sizePattern = "within ([%d%.]+) yd", base = 8, unscaled = true,
-		defaults = { enabled = false, mode = "always", line = { 1, 0.96, 0.41, 0.6 }, fill = { 1, 0.96, 0.41, 0 } },
+		defaults = { enabled = false, mode = "always", line = { 1, 0.96, 0.41, 0.45 }, fill = { 1, 0.96, 0.41, 0 } },
 	},
 	{
 		-- How far your auto-attack swings reach: 8 yd, centre to centre (nothing changes it).
 		id = "rogue_melee", name = "Melee range", shape = "circle", radius = 8, sizeLabel = "swing reach",
 		desc = "How far your melee swings reach for an enemy.",
-		defaults = { enabled = false, mode = "always", line = { 1, 0.45, 0.3, 0.6 }, fill = { 1, 0.45, 0.3, 0 } },
+		defaults = { enabled = false, mode = "always", line = { 1, 0.45, 0.3, 0.45 }, fill = { 1, 0.45, 0.3, 0 } },
 	},
 }, {
 	icon = "Interface\\Icons\\INV_ThrowingKnife_04",

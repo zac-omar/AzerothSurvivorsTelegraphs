@@ -13,11 +13,18 @@ local ORDER = { "common", "warrior", "paladin", "hunter", "rogue", "priest", "sh
 -- The settings a line can carry, in the order a line has them, and what each may be: a number
 -- within the options window's own limits, one of a few words, a colour, on or off.
 local KEYS = { "enabled", "mode", "style", "flash", "most", "length", "radius", "line", "fill", "width", "glow",
-	"strip", "size", "spacing", "fillStyle", "fillSpacing", "cdFill", "durFill", "uptime" };
+	"strip", "size", "spacing", "fillStyle", "fillSpacing", "cdFill", "durFill", "uptime",
+	"lineOn", "fillOn", "areaOn", "frontOn", "pulseOn", "wallOn", "wallHeight", "bands", "bandEvery", "bandNumbers", "marks",
+	"warnAt", "warnText", "pinGuardians", "pinBosses", "pinCaches", "pinTimers", "pinEdge", "pinSize" };
 local SPEC = {
 	enabled = { "bool" }, glow = { "bool" }, mode = { "mode" },
 	cdFill = { "bool" }, durFill = { "bool" }, uptime = { "bool" },
-	style = { "word", smooth = true, dots = true }, fillStyle = { "word", solid = true, front = true },
+	lineOn = { "bool" }, fillOn = { "bool" }, areaOn = { "bool" }, frontOn = { "bool" }, pulseOn = { "bool" },
+	wallOn = { "bool" }, bands = { "bool" }, bandNumbers = { "bool" }, marks = { "bool" },
+	wallHeight = { "num", 0.25, 5 }, bandEvery = { "num", 1, 50 },
+	warnAt = { "num", 0, 40 }, warnText = { "bool" }, pinGuardians = { "bool" }, pinBosses = { "bool" },
+	pinCaches = { "bool" }, pinTimers = { "bool" }, pinEdge = { "bool" }, pinSize = { "num", 6, 32 },
+	style = { "word", texture = true, smooth = true, dots = true }, fillStyle = { "word", solid = true, front = true },
 	line = { "color" }, fill = { "color" },
 	flash = { "num", 0.1, 5 }, most = { "num", 0, 40 }, length = { "num", 0, 100 }, radius = { "num", 0.5, 100 },
 	width = { "num", 1, 12 }, strip = { "num", 1, 8 }, size = { "num", 1, 16 }, spacing = { "num", 3, 40 },

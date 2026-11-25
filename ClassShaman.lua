@@ -7,7 +7,7 @@ AST_Register("shaman", {
 		modes = { "cast", "cooldown" },
 		tipNames = { "Fire Nova" }, sizePattern = "within ([%d%.]+) yd of you",
 		base = 12,
-		defaults = { mode = "cast", line = { 1, 0.55, 0.2, 1 }, fill = { 1, 0.4, 0.1, 0.3 } },
+		defaults = { mode = "cast", line = { 1, 0.55, 0.2, 0.8 }, fill = { 1, 0.4, 0.1, 0.15 } },
 	},
 	{
 		-- "Drops a totem beside you for 17 sec once enemies are within 25 yd. Every 2 sec it deals ...
@@ -21,7 +21,7 @@ AST_Register("shaman", {
 		-- 10 yd x Area x (1 + 10% per Totemic Mastery rank), for 17 sec
 		areaItem = "item/magmatotem", durationItem = "item/magmatotem",
 		base = 10, reachTalent = "totemic_mastery", reachPerRank = 0.10, duration = 17, every = 2, recDuration = 12, tail = 0,
-		defaults = { mode = "duration", line = { 1, 0.5, 0.15, 1 }, fill = { 1, 0.35, 0.05, 0.2 } },
+		defaults = { mode = "duration", line = { 1, 0.5, 0.15, 0.65 }, fill = { 1, 0.35, 0.05, 0.12 } },
 	},
 	{
 		-- Flametongue Weapon: "Rockbiter Weapon has a 5% (10%, 15%) chance to cast a free Fire Nova",
@@ -32,7 +32,7 @@ AST_Register("shaman", {
 		needName = "the Flametongue Weapon talent",
 		free = { spells = { 1535 }, names = { "firenova" }, ownSpell = "fire_nova" },
 		modes = { "proc" },
-		defaults = { mode = "proc", line = { 1, 0.7, 0.3, 1 }, fill = { 1, 0.55, 0.15, 0.3 } },
+		defaults = { mode = "proc", line = { 1, 0.7, 0.3, 0.8 }, fill = { 1, 0.55, 0.15, 0.15 } },
 	},
 	{
 		-- The Emberwake Pendant (Flame Shock): "Each tick of Flame Shock also hits 2 nearby enemies
@@ -41,7 +41,7 @@ AST_Register("shaman", {
 		desc = "With the Emberwake Pendant, each tick of Flame Shock also hits 2 enemies near its target: the area they can be in.",
 		match = { "item/flameshock" }, needName = "the Emberwake Pendant",
 		on = { spells = { 8050 }, names = { "flameshock" }, ticks = true },
-		defaults = { mode = "event", flash = 0.35, line = { 1, 0.5, 0.2, 1 }, fill = { 1, 0.4, 0.1, 0.15 } },
+		defaults = { mode = "event", flash = 0.35, line = { 1, 0.5, 0.2, 0.8 }, fill = { 1, 0.4, 0.1, 0.15 } },
 	},
 	{
 		-- The Heart of the Earthbreaker (Rockbiter Weapon): "The first hit of each cast sends a
@@ -51,7 +51,7 @@ AST_Register("shaman", {
 		desc = "With the Heart of the Earthbreaker, the first hit of each Rockbiter Weapon sends a shockwave out of its target: the area it strikes.",
 		match = { "item/rockbiter" }, needName = "the Heart of the Earthbreaker",
 		on = { spells = { 8017 }, names = { "rockbiterweapon", "rockbiter" } },
-		defaults = { mode = "event", flash = 0.45, line = { 0.85, 0.65, 0.35, 1 }, fill = { 0.75, 0.55, 0.25, 0.25 } },
+		defaults = { mode = "event", flash = 0.45, line = { 0.85, 0.65, 0.35, 0.8 }, fill = { 0.75, 0.55, 0.25, 0.15 } },
 	},
 	{
 		-- The Uncommon armor set's 8 pieces (each at 3 stars or more): "Enemies dying with your Flame
@@ -64,7 +64,7 @@ AST_Register("shaman", {
 		needs = { ["set/uncommon/shaman/5"] = "flameshock", ["set/uncommon/shaman"] = "flameshock" },
 		match = { "set/uncommon/shaman/5", "set/uncommon/shaman" }, talentKeys = { "set/uncommon/shaman/5", "set/uncommon/shaman" }, showsItself = true,
 		needName = "the Uncommon shaman set's 8 pieces at 3 stars or more",
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.55, 0.25, 1 }, fill = { 1, 0.4, 0.1, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.55, 0.25, 0.8 }, fill = { 1, 0.4, 0.1, 0.15 } },
 	},
 	{
 		-- The T0.5 armor set's 8 pieces: "Every Stormstrike causes Thunderburst, dealing Nature damage
@@ -78,7 +78,7 @@ AST_Register("shaman", {
 		radii = { ["set/t05/shaman/5"] = 8, ["set/t05/shaman"] = 6 },
 		needName = "the T0.5 shaman set's 8 pieces (known from its first Thunderburst)",
 		on = { spells = { 17364 }, names = { "stormstrike" } },
-		defaults = { mode = "event", flash = 0.4, line = { 0.5, 0.75, 1, 1 }, fill = { 0.35, 0.6, 1, 0.2 } },
+		defaults = { mode = "event", flash = 0.4, line = { 0.5, 0.75, 1, 0.8 }, fill = { 0.35, 0.6, 1, 0.15 } },
 	},
 	{
 		-- How far your targeted spells reach for an enemy.
@@ -86,7 +86,7 @@ AST_Register("shaman", {
 		desc = "How far your targeted spells reach for an enemy.",
 		tipNames = { "Lightning Bolt", "Chain Lightning", "Earth Shock", "Flame Shock", "Frost Shock" },
 		sizePattern = "within ([%d%.]+) yd", base = 30, unscaled = true,
-		defaults = { enabled = false, mode = "always", line = { 0.3, 0.6, 1, 0.6 }, fill = { 0.3, 0.6, 1, 0 } },
+		defaults = { enabled = false, mode = "always", line = { 0.3, 0.6, 1, 0.45 }, fill = { 0.3, 0.6, 1, 0 } },
 	},
 }, {
 	icon = "Interface\\Icons\\Spell_Nature_BloodLust",

@@ -7,7 +7,7 @@ AST_Register("druid", {
 		modes = { "cast", "cooldown" },
 		tipNames = { "Swipe" }, sizePattern = "within ([%d%.]+) yd of you",
 		base = 7,
-		defaults = { mode = "cast", line = { 1, 0.6, 0.2, 1 }, fill = { 1, 0.49, 0.04, 0.3 } },
+		defaults = { mode = "cast", line = { 1, 0.6, 0.2, 0.8 }, fill = { 1, 0.49, 0.04, 0.15 } },
 	},
 	{
 		-- "Lands on the thickest group of enemies within 28 yd: every enemy within 10 yd of that spot
@@ -19,7 +19,7 @@ AST_Register("druid", {
 		-- 10 yd x Area x (1 + 10% per Gale Winds rank)
 		areaItem = "item/hurricane", durationItem = "item/hurricane",
 		base = 10, reachTalent = "gale_winds", reachPerRank = 0.10, duration = 11, every = 1, recDuration = 8,
-		defaults = { mode = "duration", line = { 0.55, 0.95, 0.6, 1 }, fill = { 0.4, 0.85, 0.45, 0.25 } },
+		defaults = { mode = "duration", line = { 0.55, 0.95, 0.6, 0.65 }, fill = { 0.4, 0.85, 0.45, 0.12 } },
 	},
 	{
 		-- Tranquility (Restoration milestone): "Every heal you cast also strikes every enemy within
@@ -30,7 +30,7 @@ AST_Register("druid", {
 		needName = "the Tranquility talent",
 		free = { names = { "tranquility" } },
 		modes = { "proc" },
-		defaults = { mode = "proc", line = { 0.55, 1, 0.55, 1 }, fill = { 0.4, 0.9, 0.4, 0.25 } },
+		defaults = { mode = "proc", line = { 0.55, 1, 0.55, 0.8 }, fill = { 0.4, 0.9, 0.4, 0.15 } },
 	},
 	{
 		-- Dire Bear Form (Feral capstone): "A free Swipe tears around you every 3 sec".
@@ -41,7 +41,7 @@ AST_Register("druid", {
 		clock = { names = { "Dire Bear Form" }, every = 3 },
 		free = { spells = { 779 }, names = { "swipe" }, ownSpell = "swipe" },
 		modes = { "proc", "cooldown" },
-		defaults = { mode = "proc", line = { 0.85, 0.55, 0.3, 1 }, fill = { 0.75, 0.45, 0.2, 0.25 } },
+		defaults = { mode = "proc", line = { 0.85, 0.55, 0.3, 0.8 }, fill = { 0.75, 0.45, 0.2, 0.15 } },
 	},
 	{
 		-- Enrage: "When an enemy strikes you in melee, 10% (up to 50%) chance to answer with a free
@@ -52,7 +52,7 @@ AST_Register("druid", {
 		needName = "the Enrage talent",
 		free = { spells = { 779 }, names = { "swipe" }, ownSpell = "swipe" },
 		modes = { "proc" },
-		defaults = { mode = "proc", line = { 1, 0.4, 0.3, 1 }, fill = { 0.95, 0.3, 0.2, 0.3 } },
+		defaults = { mode = "proc", line = { 1, 0.4, 0.3, 0.8 }, fill = { 0.95, 0.3, 0.2, 0.15 } },
 	},
 	{
 		-- The Pendant of the Plague on Moonfire or Insect Swarm: enemies that die with it on them
@@ -62,7 +62,7 @@ AST_Register("druid", {
 		match = { "item/moonfire", "item/insectswarm" },
 		needs = { ["item/moonfire"] = "moonfire", ["item/insectswarm"] = "insectswarm" },
 		needName = "the Pendant of the Plague (on Moonfire or Insect Swarm)",
-		defaults = { mode = "event", flash = 0.5, line = { 0.55, 1, 0.35, 1 }, fill = { 0.4, 0.9, 0.2, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 0.55, 1, 0.35, 0.8 }, fill = { 0.4, 0.9, 0.2, 0.15 } },
 	},
 	{
 		-- The Amulet of the Inferno on Hurricane: enemies it kills explode for 30% of their max health
@@ -71,7 +71,7 @@ AST_Register("druid", {
 		desc = "With the Amulet of the Inferno on Hurricane, enemies Hurricane kills explode: where they do.",
 		match = { "item/hurricane" }, needName = "the Amulet of the Inferno (Hurricane)",
 		by = { spells = { 16914 }, names = { "hurricane" } },
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.6, 0.25, 1 }, fill = { 1, 0.45, 0.1, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.6, 0.25, 0.8 }, fill = { 1, 0.45, 0.1, 0.15 } },
 	},
 	{
 		-- The Epic armor set's 8 pieces (each at 3 stars or more): "Starfire bursts on every enemy
@@ -83,7 +83,7 @@ AST_Register("druid", {
 		match = { "set/epic/druid" }, talentKeys = { "set/epic/druid" },
 		needName = "the Epic druid set's 8 pieces at 3 stars or more",
 		on = { spells = { 2912 }, names = { "starfire" } },
-		defaults = { mode = "event", flash = 0.4, line = { 0.85, 0.65, 1, 1 }, fill = { 0.7, 0.5, 1, 0.25 } },
+		defaults = { mode = "event", flash = 0.4, line = { 0.85, 0.65, 1, 0.8 }, fill = { 0.7, 0.5, 1, 0.15 } },
 	},
 	{
 		-- How far your targeted spells reach for an enemy.
@@ -91,7 +91,7 @@ AST_Register("druid", {
 		desc = "How far your targeted spells reach for an enemy.",
 		tipNames = { "Wrath", "Moonfire", "Starfire", "Insect Swarm", "Entangling Roots" },
 		sizePattern = "within ([%d%.]+) yd", base = 30, unscaled = true,
-		defaults = { enabled = false, mode = "always", line = { 1, 0.49, 0.04, 0.6 }, fill = { 1, 0.49, 0.04, 0 } },
+		defaults = { enabled = false, mode = "always", line = { 1, 0.49, 0.04, 0.45 }, fill = { 1, 0.49, 0.04, 0 } },
 	},
 }, {
 	icon = "Interface\\Icons\\Ability_Druid_Maul",

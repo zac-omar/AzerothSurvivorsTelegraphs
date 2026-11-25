@@ -7,14 +7,14 @@ AST_Register("common", {
 		id = "choker", name = "Choker of the Fire Lord", shape = "enemy", trigger = "kill", cap = 4,
 		desc = "While you wear it, enemies you kill explode: where they do.",
 		match = { "chokerofthefirelord", "firelord" }, radius = 6,
-		defaults = { mode = "event", flash = 0.5, line = { 1, 0.45, 0.2, 1 }, fill = { 1, 0.35, 0.1, 0.25 } },
+		defaults = { mode = "event", flash = 0.5, line = { 1, 0.45, 0.2, 0.8 }, fill = { 1, 0.35, 0.1, 0.15 } },
 	},
 	{
 		-- "Your critical hits splash 30% on enemies within 5 yd, at most 6 times a second"
 		id = "onyxia", name = "Onyxia Tooth Pendant", shape = "enemy", trigger = "crit", cap = 6,
 		desc = "While you wear it, your critical hits splash onto enemies nearby: where they land.",
 		match = { "onyxiatoothpendant", "onyxiatooth" }, radius = 5,
-		defaults = { mode = "event", flash = 0.4, line = { 0.6, 0.9, 1, 1 }, fill = { 0.5, 0.8, 1, 0.2 } },
+		defaults = { mode = "event", flash = 0.4, line = { 0.6, 0.9, 1, 0.8 }, fill = { 0.5, 0.8, 1, 0.15 } },
 	},
 	{
 		-- War Stomp (Tauren): goes off on its own from the racial slot, hitting every enemy within
@@ -25,7 +25,7 @@ AST_Register("common", {
 		modes = { "cast", "cooldown" },
 		tipNames = { "War Stomp" }, sizePattern = "within ([%d%.]+) yd of you",
 		base = 8,
-		defaults = { mode = "cast", line = { 0.95, 0.7, 0.35, 1 }, fill = { 0.85, 0.55, 0.25, 0.3 } },
+		defaults = { mode = "cast", line = { 0.95, 0.7, 0.35, 0.8 }, fill = { 0.85, 0.55, 0.25, 0.15 } },
 	},
 	{
 		-- Escape Artist (Gnome): the same from the racial slot, rooting every enemy within 8 yd of
@@ -35,7 +35,7 @@ AST_Register("common", {
 		modes = { "cast", "cooldown" },
 		tipNames = { "Escape Artist" }, sizePattern = "within ([%d%.]+) yd of you",
 		base = 8,
-		defaults = { mode = "cast", line = { 0.45, 0.9, 0.75, 1 }, fill = { 0.35, 0.8, 0.65, 0.3 } },
+		defaults = { mode = "cast", line = { 0.45, 0.9, 0.75, 0.8 }, fill = { 0.35, 0.8, 0.65, 0.15 } },
 	},
 	{
 		-- A downed teammate in co-op: stand within 5 yd of them to bring them back (6 sec, 9 at
@@ -43,12 +43,12 @@ AST_Register("common", {
 		-- with your revive's progress.
 		id = "revive", name = "Revive range", shape = "downed", radius = 5, sizeLabel = "revive range",
 		desc = "In co-op, where to stand to bring a downed teammate back. It fills as you revive them.",
-		defaults = { mode = "always", line = { 0.4, 1, 0.5, 1 }, fill = { 0.3, 1, 0.4, 0.2 } },
+		defaults = { mode = "always", line = { 0.4, 1, 0.5, 0.9 }, fill = { 0.3, 1, 0.4, 0.15 } },
 	},
 	{
 		id = "ring", name = "Custom ring", shape = "circle",
 		desc = "A ring of any size around you, for whatever you want to keep an eye on.",
-		defaults = { enabled = false, mode = "always", radius = 8, line = { 1, 0.25, 0.25, 1 }, fill = { 1, 0.25, 0.25, 0 } },
+		defaults = { enabled = false, mode = "always", radius = 8, line = { 1, 0.25, 0.25, 0.45 }, fill = { 1, 0.25, 0.25, 0 } },
 	},
 }, {
 	blurb = "Amulets any hero can find, the racials that hit around you, co-op revives and a ring of your own.",

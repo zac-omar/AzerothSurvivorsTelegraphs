@@ -26,7 +26,8 @@ local CLASS_COLORS = {
 	rogue = { 1, 0.96, 0.41 }, priest = { 1, 1, 1 }, shaman = { 0, 0.44, 0.87 },
 	mage = { 0.41, 0.8, 0.94 }, warlock = { 0.58, 0.51, 0.79 }, druid = { 1, 0.49, 0.04 },
 };
-local KINDS = { "Spells", "Talents", "Amulets", "Sets", "Racial", "Other", "Experimental" };
+local KINDS = { "Spells", "Ranges", "Talents", "Amulets", "Sets", "Racial", "Guardians", "Other", "Experimental",
+	"Tools", "Polish", "Time", "Signature", "Textures" };
 local ICONS = {
 	general = "Interface\\Icons\\INV_Misc_Gear_01",
 	common = "Interface\\Icons\\INV_Misc_Gem_01",
@@ -69,6 +70,11 @@ local function Refresh()
 			ui.general.refreshers[i]();
 		end
 	end
+	if ( ui.all and ui.all:IsShown() ) then
+		for i = 1, table.getn(ui.all.refreshers) do
+			ui.all.refreshers[i]();
+		end
+	end
 end
 
 -- "priest" -> "Priest"; Title: as the game names the class in its language
@@ -89,6 +95,9 @@ end
 local function Named(def)
 	if ( def.custom ) then
 		return string.format(L("Custom ring %d"), def.custom);
+	elseif ( def.of ) then
+		-- a skill's ring (Skills.lua): the skill's name in the game's language, in its format
+		return string.format(L(def.ofFmt), L(def.of));
 	end
 	return L(def.name);
 end
@@ -141,7 +150,7 @@ end
 -- Third: it waits on another telegraph being on, not on your hero.
 local function Readiness(def)
 	local _, _, myClass = AST.State();
-	if ( page ~= "common" and page ~= myClass ) then
+	if ( page ~= "common" and page ~= "lab" and page ~= myClass ) then
 		return false, string.format(L("You're playing %s."), myClass and Title(myClass) or L("another class"));
 	elseif ( Skipped(def) ) then
 		return false, L("Priest Telegraphs draws it while it runs.");
@@ -238,6 +247,66 @@ local function Box(parent)
 	return f;
 end
 
+-- Asked first, for what can't be undone (a misclick mustn't wipe a setup): `text`, a red button
+-- `yes` that does it, and Cancel; the window shaded behind it and taking no clicks meanwhile.
+local function Confirm(text, yes, onYes)
+	local c = ui.confirm;
+	if ( not c ) then
+		c = CreateFrame("Frame", "ASTConfirm", win);
+		c:SetAllPoints(win);
+		c:SetFrameLevel((win:GetFrameLevel() or 1) + 40);
+		c:EnableMouse(true);
+		c.shade = c:CreateTexture(nil, "BACKGROUND");
+		AST.SetPiece(c.shade, SOLID);
+		c.shade:SetAllPoints(c);
+		c.shade:SetVertexColor(0, 0, 0, 0.65);
+		local box = CreateFrame("Frame", nil, c);
+		box:SetWidth(400);
+		box:SetHeight(150);
+		box:SetPoint("CENTER", c, "CENTER", 0, 30);
+		box:SetBackdrop(FLAT);
+		box:SetBackdropColor(0.07, 0.07, 0.09, 0.98);
+		box:SetBackdropBorderColor(1, 0.45, 0.3, 1);
+		c.title = Label(box, "Are you sure?", "GameFontNormalLarge");
+		c.title:SetPoint("TOP", box, "TOP", 0, -14);
+		c.text = Label(box, "");
+		c.text:SetPoint("TOPLEFT", box, "TOPLEFT", 20, -44);
+		c.text:SetPoint("RIGHT", box, "RIGHT", -20, 0);
+		c.text:SetJustifyH("CENTER");
+		c.yes = Button(box, "", 170, 24, function()
+			c:Hide();
+			if ( c.onYes ) then
+				c.onYes();
+			end
+		end);
+		c.yes:SetPoint("BOTTOMRIGHT", box, "BOTTOM", -6, 16);
+		c.yes:SetBackdropColor(0.5, 0.12, 0.08, 0.95);
+		c.no = Button(box, "Cancel", 110, 24, function() c:Hide(); end);
+		c.no:SetPoint("BOTTOMLEFT", box, "BOTTOM", 6, 16);
+		ui.confirm = c;
+	end
+	c.text:SetText(text);
+	c.yes.text:SetText(L(yes));
+	c.onYes = onYes;
+	c:Show();
+end
+
+-- Every telegraph back to its defaults, and the General page's settings: your own rings stay (with
+-- their settings reset too), as do where the window, the minimap button and the FPS bar sit.
+local function ResetEverything()
+	local db = AST.State();
+	db.t = {};
+	db.mirror, db.rotate, db.meterOff, db.hidden = nil, nil, nil, nil;
+	if ( db.ui ) then
+		db.ui.bulkLeave = nil;
+	end
+	if ( db.minimapHidden ) then
+		AST.ShowMinimapButton(true);
+	end
+	AST.SetupClass();
+	DEFAULT_CHAT_FRAME:AddMessage("|cffb080ffAS Telegraphs|r: " .. L("every telegraph is back to its defaults."));
+end
+
 ---------------------------------------------------------------------------------------------
 -- Rows of settings. A panel keeps its rows (panel.rows), what updates them (panel.refreshers)
 -- and the texts that change on their own (panel.live).
@@ -253,7 +322,7 @@ local function Row(panel, label, when, h)
 	-- a long one (in another language) stays left of the row's controls
 	row.label:SetWidth(CX - 6);
 	row.label:SetJustifyH("LEFT");
-	row.when = when;
+	row.when, row.tag = when, panel.tag;
 	table.insert(panel.rows, row);
 	return row;
 end
@@ -261,7 +330,7 @@ end
 -- A heading over the rows after it, hidden when they all are.
 local function Section(panel, title)
 	local row = CreateFrame("Frame", nil, panel);
-	row.height, row.section = 26, true;
+	row.height, row.section, row.tag = 26, true, panel.tag;
 	row:SetHeight(row.height);
 	local text = Label(row, title, "GameFontNormalSmall", true);
 	text:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 6);
@@ -272,11 +341,20 @@ local function Section(panel, title)
 	return row;
 end
 
--- Places a panel's rows from panel.top down.
+-- Places a panel's rows from panel.top down, scrolled by panel.offset (its mouse wheel); a row that
+-- would reach past panel.floor (the panel's bottom bar) waits below it. panel.total: the rows'
+-- height in all.
 local function Layout(panel)
 	local rows, shown = panel.rows, {};
 	for i = 1, table.getn(rows) do
 		shown[i] = rows[i].section or not rows[i].when or rows[i].when(selected);
+		if ( selected and selected.shape == "lab" and panel == ui.panel ) then
+			shown[i] = false;
+		end
+		-- a telegraph with rows of its own (the minimap's pins) shows only those, and only it them
+		if ( selected and panel == ui.panel and ( selected.ownRows or rows[i].tag ) and rows[i].tag ~= selected.ownRows ) then
+			shown[i] = false;
+		end
 	end
 	for i = 1, table.getn(rows) do
 		if ( rows[i].section ) then
@@ -288,19 +366,55 @@ local function Layout(panel)
 			shown[i] = any;
 		end
 	end
-	local y = panel.top;
+	local top, floor, off = panel.top, panel.floor or -100000, panel.offset or 0;
+	local y = top + off;
 	for i = 1, table.getn(rows) do
 		local row = rows[i];
 		if ( shown[i] ) then
-			row:ClearAllPoints();
-			row:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, y);
-			row:SetPoint("RIGHT", panel, "RIGHT", -14, 0);
-			row:Show();
+			if ( y <= top + 0.5 and y - row.height >= floor ) then
+				row:ClearAllPoints();
+				row:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, y);
+				row:SetPoint("RIGHT", panel, "RIGHT", -14, 0);
+				row:Show();
+			else
+				row:Hide();
+			end
 			y = y - row.height - 2;
 		else
 			row:Hide();
 		end
 	end
+	panel.total = top + off - y;
+	-- more above or below: say so
+	if ( panel.more ) then
+		local most = math.max(0, panel.total - (top - floor));
+		if ( most > 1 ) then
+			panel.more:SetText(off < most - 1 and L("Scroll for more") or L("Scroll up for more"));
+			panel.more:Show();
+		else
+			panel.more:Hide();
+		end
+	end
+end
+
+-- A panel of rows that scrolls with the mouse wheel, its rows above `floor`. panel.Scroll(delta):
+-- whether it scrolled (it has more than shows), for a row that would take the wheel for itself.
+local function Scrolls(panel, floor, moreY)
+	panel.floor, panel.offset = floor, 0;
+	panel.more = Label(panel, "");
+	panel.more:SetTextColor(0.5, 0.5, 0.58);
+	panel.more:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -16, moreY or 6);
+	panel.Scroll = function(delta)
+		local most = math.max(0, (panel.total or 0) - (panel.top - panel.floor));
+		if ( most <= 1 ) then
+			return false;
+		end
+		panel.offset = math.max(0, math.min(most, (panel.offset or 0) - (delta or 0) * 44));
+		Layout(panel);
+		return true;
+	end;
+	panel:EnableMouseWheel(true);
+	panel:SetScript("OnMouseWheel", function() panel.Scroll(arg1); end);
 end
 
 -- `hint`: a line beside the box on what it does.
@@ -480,6 +594,10 @@ local function Stepper(panel, label, when, get, set, step, lo, hi, fmt, typed)
 	plus:SetPoint("LEFT", row, "LEFT", CX + 132, 0);
 	row:EnableMouseWheel(true);
 	row:SetScript("OnMouseWheel", function()
+		-- a panel with more than shows scrolls; else the wheel steps the number
+		if ( panel.Scroll and panel.Scroll(arg1) ) then
+			return;
+		end
 		if ( arg1 and arg1 > 0 ) then
 			Nudge(1);
 		else
@@ -502,8 +620,11 @@ local function Color(panel, label, when, key)
 	swatch:SetHeight(18);
 	swatch:SetPoint("LEFT", row, "LEFT", CX, 0);
 	local function SetRGB(r, g, b)
-		local c = AST.Settings(selected)[key];
+		local s = AST.Settings(selected);
+		local c = s[key];
 		c[1], c[2], c[3] = r, g, b;
+		s.hand = s.hand or {};
+		s.hand[key] = true;
 		Refresh();
 	end
 	local x = CX + 26;
@@ -609,7 +730,7 @@ local function ClassOrder()
 	local _, _, myClass = AST.State();
 	local list = {};
 	for class in pairs(AST.registry) do
-		if ( class ~= "common" and class ~= myClass ) then
+		if ( class ~= "common" and class ~= "lab" and class ~= myClass ) then
 			table.insert(list, class);
 		end
 	end
@@ -627,10 +748,12 @@ local function BuildNav()
 	ui.nav:SetPoint("BOTTOMLEFT", win, "BOTTOMLEFT", 10, 10);
 	ui.tabs = {};
 	Tab("general", ICONS.general, "General");
+	Tab("all", ICONS.addon, "All telegraphs");
 	Tab("common", ICONS.common, "Any class");
+	Tab("lab", "Interface\\Icons\\INV_Misc_Spyglass_02", "Lab");
 	ui.classHead = Label(ui.nav, "Classes", "GameFontNormalSmall", true);
 	for class, r in pairs(AST.registry) do
-		if ( class ~= "common" ) then
+		if ( class ~= "common" and class ~= "lab" ) then
 			local b = Tab(class, r.icon or ICONS.class, Cap(class));
 			local c = ClassColor(class);
 			b.text:SetTextColor(c[1], c[2], c[3]);
@@ -662,8 +785,9 @@ local function BuildNav()
 		-- General, the classes under their heading, then Any class
 		local y = -6;
 		byPage.general:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y);
-		ui.classHead:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 12, y - 40);
-		y = y - 56;
+		byPage.all:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 30);
+		ui.classHead:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 12, y - 70);
+		y = y - 86;
 		local classes = ClassOrder();
 		for i = 1, table.getn(classes) do
 			local b = byPage[classes[i]];
@@ -673,6 +797,22 @@ local function BuildNav()
 		end
 		byPage.common:ClearAllPoints();
 		byPage.common:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 10);
+		-- the Lab, apart from the rest: hidden unless /ast lab tab shows it (its experiments are
+		-- for trying out, not for everyone)
+		if ( byPage.lab ) then
+			local db = AST.State();
+			if ( db.labTab ) then
+				byPage.lab:ClearAllPoints();
+				byPage.lab:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 56);
+				byPage.lab.text:SetTextColor(0.75, 0.55, 1);
+				byPage.lab:Show();
+			else
+				byPage.lab:Hide();
+				if ( page == "lab" ) then
+					ShowPage("general");
+				end
+			end
+		end
 	end);
 end
 
@@ -681,6 +821,9 @@ end
 
 local function Select(def)
 	local db = AST.State();
+	if ( selected ~= def ) then
+		ui.panel.offset = 0;
+	end
 	selected = def;
 	db.ui.sel[page] = def and def.id;
 	if ( def ) then
@@ -735,6 +878,8 @@ local function Entry()
 		end
 		local s = AST.Settings(e.def);
 		s.enabled = not s.enabled;
+		s.hand = s.hand or {};
+		s.hand.enabled = true;
 		Refresh();
 	end);
 	e.dot:SetScript("OnEnter", function()
@@ -766,8 +911,18 @@ local function LayoutList()
 	local y = -6 + ui.offset;
 	local total = 0;
 	for i = 1, table.getn(ui.items) do
+		total = total + ui.items[i].height;
+	end
+	ui.listH = total;
+	-- a list longer than shows: a line under it says so, with room made for it
+	local room = BODY_H - 34;
+	if ( total + 6 > room ) then
+		room = room - 14;
+	end
+	ui.listRoom = room;
+	for i = 1, table.getn(ui.items) do
 		local item = ui.items[i];
-		if ( y <= 0 and y - item.height >= -(BODY_H - 34) ) then
+		if ( y <= -5 and y - item.height >= -room ) then
 			item:ClearAllPoints();
 			item:SetPoint("TOPLEFT", ui.list, "TOPLEFT", 8, y);
 			item:Show();
@@ -775,9 +930,16 @@ local function LayoutList()
 			item:Hide();
 		end
 		y = y - item.height;
-		total = total + item.height;
 	end
-	ui.listH = total;
+	if ( ui.listMore ) then
+		local most = total + 6 - room;
+		if ( most > 1 ) then
+			ui.listMore:SetText(ui.offset < most - 1 and L("Scroll for more") or L("Scroll up for more"));
+			ui.listMore:Show();
+		else
+			ui.listMore:Hide();
+		end
+	end
 end
 
 -- Fills the list with the page's telegraphs, under their kinds' headings.
@@ -788,7 +950,7 @@ local function Populate()
 	for k = 1, table.getn(KINDS) do
 		local first = true;
 		for i = 1, table.getn(defs) do
-			if ( Kind(defs[i]) == KINDS[k] ) then
+			if ( Kind(defs[i]) == KINDS[k] and not defs[i].hidden ) then
 				if ( first ) then
 					nH = nH + 1;
 					ui.heads[nH] = ui.heads[nH] or Heading();
@@ -830,10 +992,13 @@ local function BuildList()
 		end
 	end);
 	ui.addRing:SetPoint("BOTTOM", ui.list, "BOTTOM", 0, 8);
+	ui.listMore = Label(ui.list, "");
+	ui.listMore:SetTextColor(0.5, 0.5, 0.58);
+	ui.listMore:SetPoint("BOTTOMRIGHT", ui.list, "BOTTOMRIGHT", -10, 33);
 	-- a long list scrolls with the mouse wheel
 	ui.list:EnableMouseWheel(true);
 	ui.list:SetScript("OnMouseWheel", function()
-		local most = math.max(0, (ui.listH or 0) - (BODY_H - 40));
+		local most = math.max(0, (ui.listH or 0) + 6 - (ui.listRoom or (BODY_H - 34)));
 		ui.offset = math.max(0, math.min(most, ui.offset - (arg1 or 0) * 22));
 		LayoutList();
 	end);
@@ -869,6 +1034,11 @@ end
 local function StatusLines()
 	local d = selected;
 	local _, _, myClass = AST.State();
+	if ( d.shape == "lab" ) then
+		-- a Lab experiment: what it changes, and an error that stopped it
+		local err = AST.lab and AST.lab.errors[d.id];
+		return d.applies or "", err and ("Stopped: " .. err) or "Test plays a demo of it around you.", err ~= nil;
+	end
 	if ( page ~= "common" and page ~= myClass ) then
 		return string.format(L("Shown when you play %s. You're playing %s."), Title(page), myClass and Title(myClass) or L("another class")), "", true;
 	elseif ( Skipped(d) ) then
@@ -921,6 +1091,8 @@ end
 local function Describe(d)
 	if ( d.experimental ) then
 		return L("Experimental, off to start with: the spot it marks can be off.") .. " " .. L(d.desc or "");
+	elseif ( d.descFmt ) then
+		return string.format(L(d.descFmt), L(d.of));
 	elseif ( d.desc ) then
 		return L(d.desc);
 	elseif ( d.shape == "cone" ) then
@@ -948,66 +1120,209 @@ local function Pct(v) return string.format("%d%%", math.floor(v * 100 + 0.5)); e
 local function Px(v) return string.format(L("%g px"), v); end
 local function Yd(v) return string.format(L("%g yd"), v); end
 
--- The settings rows, the ones that don't fit what the telegraph is or how it is drawn hidden.
+---------------------------------------------------------------------------------------------
+-- Changes to many telegraphs at once (the All telegraphs page, "Copy look to"). Each is written
+-- into every telegraph it reaches, so afterwards any one of them can be set differently on its own
+-- page; and a setting changed on a telegraph's own page (marked set by hand) is left alone while
+-- the All page says to keep those.
+
+-- What a telegraph's look is: copied from one to others by "Copy look to".
+local LOOK = { "style", "line", "fill", "width", "glow", "strip", "size", "spacing", "fillStyle", "fillSpacing",
+	"lineOn", "fillOn", "areaOn", "frontOn", "pulseOn" };
+
+-- The telegraphs a change reaches: your class's and Any class' ("mine"), every class's ("all"),
+-- your own rings ("rings"), or one page's (its name). Never the Lab's.
+local function Reach(scope)
+	local _, _, myClass = AST.State();
+	local out = {};
+	for p, r in pairs(AST.registry) do
+		local take = p ~= "lab";
+		if ( scope == "mine" ) then
+			take = take and ( p == myClass or p == "common" );
+		elseif ( scope ~= "all" and scope ~= "rings" ) then
+			take = p == scope;
+		end
+		for i = 1, ( take and table.getn(r.defs) or 0 ) do
+			local d = r.defs[i];
+			if ( not d.hidden and ( scope ~= "rings" or d.custom or d.id == "ring" ) ) then
+				table.insert(out, d);
+			end
+		end
+	end
+	return out;
+end
+
+-- Whether a setting of a telegraph was set by hand and is to be kept.
+local function Kept(s, key)
+	return AST.State().ui.bulkLeave ~= false and s.hand ~= nil and s.hand[key] == true;
+end
+
+-- Puts fn(def, settings) to every telegraph in `defs` (fn returns false where it doesn't apply),
+-- leaving those whose `key` was set by hand; says what it did.
+local function Bulk(defs, key, fn)
+	local n, kept = 0, 0;
+	for i = 1, table.getn(defs) do
+		local s = AST.Settings(defs[i]);
+		if ( Kept(s, key) ) then
+			kept = kept + 1;
+		elseif ( fn(defs[i], s) ~= false ) then
+			n = n + 1;
+		end
+	end
+	ui.said = string.format(L("Changed %d telegraphs."), n)
+		.. ( kept > 0 and ( " " .. string.format(L("Kept %d you set by hand."), kept) ) or "" );
+	ui.saidAt = GetTime();
+	Refresh();
+end
+
+-- A row of buttons that act (rather than show a setting): { text, onClick } each.
+local function Actions(panel, label, when, list)
+	local row = Row(panel, label, when);
+	local x = CX;
+	for i = 1, table.getn(list) do
+		local act = list[i];
+		-- wide enough for its text even where the text can't be measured (about 6.5 units a letter)
+		local w = math.max(40, string.len(L(act[1])) * 6.5 + 18);
+		local b = Button(row, act[1], w, 18, act[2]);
+		b:SetPoint("LEFT", row, "LEFT", x, 0);
+		x = x + math.max(w, b:GetWidth() or 0) + 4;
+	end
+	return row;
+end
+
+-- The selected telegraph's look onto every telegraph on this page ("page") or every class ("all"),
+-- key by key: one set by hand there is kept (while the All page says so).
+local function CopyLook(scope)
+	local from = AST.Settings(selected);
+	local defs = Reach(scope == "page" and page or "all");
+	local n = 0;
+	for i = 1, table.getn(defs) do
+		if ( defs[i] ~= selected ) then
+			local s = AST.Settings(defs[i]);
+			for k = 1, table.getn(LOOK) do
+				local key = LOOK[k];
+				local v = from[key];
+				if ( type(v) == "table" ) then
+					-- a colour: its hue and its opacity are kept apart
+					local c = s[key];
+					if ( not Kept(s, key) ) then
+						c[1], c[2], c[3] = v[1], v[2], v[3];
+					end
+					if ( not Kept(s, key .. "A") ) then
+						c[4] = v[4];
+					end
+				elseif ( not Kept(s, key) ) then
+					s[key] = v;
+				end
+			end
+			n = n + 1;
+		end
+	end
+	ui.said = string.format(L("Copied this look to %d telegraphs."), n);
+	ui.saidAt = GetTime();
+	Refresh();
+end
+
+-- The settings rows, the ones that don't fit what the telegraph is or how it is drawn hidden. A
+-- setting changed here is marked as set by hand (s.hand[key]): the All telegraphs page leaves it.
 local function SettingRows(panel)
 	local function S() return AST.Settings(selected); end
+	local function Mark(key)
+		local s = S();
+		s.hand = s.hand or {};
+		s.hand[key] = true;
+	end
+	local function Get(key) return function() return S()[key]; end; end
+	local function Put(key) return function(v) S()[key] = v; Mark(key); end; end
 	local function Dotty() return S().style == "dots"; end
+	local function Drawn() return S().style == "smooth"; end
 	local function Filling() return S().mode == "cooldown"; end
 	local function Sized(d) return d.sizePattern ~= nil or d.radius ~= nil or d.radii ~= nil or d.sizeOf ~= nil; end
+	local function Round(d) return d.shape == "circle" or d.shape == "cone"; end
+	-- a fill that fills in: a cooldown's, a spot's time, a revive
+	local function Progress(d) return ( Round(d) and S().mode == "cooldown" ) or d.shape == "ground" or d.shape == "downed"; end
 
 	Section(panel, "Behaviour");
-	Choice(panel, "When", function(d) return d.modes ~= nil; end, ModeChoices,
-		function() return S().mode; end, function(v) S().mode = v; end);
+	Choice(panel, "When", function(d) return d.modes ~= nil; end, ModeChoices, Get("mode"), Put("mode"));
 	Stepper(panel, "Flash length", function()
 			local m = S().mode;
 			return m == "cast" or m == "event" or m == "shield" or m == "proc";
 		end,
-		function() return S().flash; end, function(v) S().flash = v; end, 0.1, 0.1, 5,
-		function(v) return string.format(L("%.1f sec"), v); end);
+		Get("flash"), Put("flash"), 0.1, 0.1, 5, function(v) return string.format(L("%.1f sec"), v); end, true);
 	-- fewer rings when a pack dies at once, for slower computers
-	Stepper(panel, "Most at once", function(d) return d.shape == "enemy"; end,
-		function() return S().most; end, function(v) S().most = v; end, 1, 0, 40,
+	Stepper(panel, "Most at once", function(d) return d.shape == "enemy"; end, Get("most"), Put("most"), 1, 0, 40,
 		function(v) return v <= 0 and L("no limit") or string.format(L("%d rings"), v); end);
-
 	-- the time it shows, each on its own: a cooldown filling in, a spot's time running out, and a ring
 	-- that moves with you up for good
-	Check(panel, "Cooldown fill", function(d) return ( d.shape == "circle" or d.shape == "cone" ) and S().mode == "cooldown"; end,
-		function() return S().cdFill; end, function(v) S().cdFill = v; end, "Fills as the cooldown runs");
-	Check(panel, "Duration fill", function(d) return d.shape == "ground"; end,
-		function() return S().durFill; end, function(v) S().durFill = v; end, "Fills as its time runs out");
-	Check(panel, "Uptime look", function(d) return d.follows ~= nil; end,
-		function() return S().uptime; end, function(v) S().uptime = v; end, "Comets while it never runs out");
+	Check(panel, "Cooldown fill", function(d) return Round(d) and S().mode == "cooldown"; end,
+		Get("cdFill"), Put("cdFill"), "Fills as the cooldown runs");
+	Check(panel, "Duration fill", function(d) return d.shape == "ground"; end, Get("durFill"), Put("durFill"),
+		"Fills as its time runs out");
+	Check(panel, "Uptime look", function(d) return d.follows ~= nil; end, Get("uptime"), Put("uptime"),
+		"Comets while it never runs out");
+
+	-- each part on its own: off is gone entirely (a fill off needs no opacity of 0)
+	Section(panel, "Parts");
+	Check(panel, "Outline", nil, Get("lineOn"), Put("lineOn"), "The ring's edge");
+	Check(panel, "Glow", function() return not Dotty(); end, Get("glow"), Put("glow"), "Soft light along the edge");
+	Check(panel, "Fill", nil, Get("fillOn"), Put("fillOn"), "The area itself, and what fills it in");
+	Check(panel, "Background area", Progress, Get("areaOn"), Put("areaOn"), "The faint area still to fill");
+	Check(panel, "Front line", Progress, Get("frontOn"), Put("frontOn"), "The bright line the fill has reached");
+	Check(panel, "Cast pulse", function(d) return Round(d) or d.follows ~= nil; end, Get("pulseOn"), Put("pulseOn"),
+		"The flash and shockwave of a cast");
+	-- a guardian's rings: warming to red as you near the edge, and a line of text under you
+	Section(panel, "Warning");
+	local function World(d) return d.shape == "world"; end
+	Stepper(panel, "Warn from", World, Get("warnAt"), Put("warnAt"), 1, 0, 40,
+		function(v) return v <= 0 and L("off") or string.format(L("%g yd before its edge"), v); end, true);
+	Check(panel, "Warning text", function(d) return World(d) and S().warnAt > 0; end, Get("warnText"), Put("warnText"),
+		"How far is left, under your hero");
+	-- depth helpers: rings round you and cones read better from low down
+	Section(panel, "Depth");
+	Check(panel, "Edge wall", Round, Get("wallOn"), Put("wallOn"), "A see-through wall standing on the edge");
+	Stepper(panel, "Wall height", function(d) return Round(d) and S().wallOn; end, Get("wallHeight"), Put("wallHeight"),
+		0.25, 0.25, 5, Yd, true);
+	Check(panel, "Mark enemies", Round, Get("marks"), Put("marks"), "A mark under every enemy inside it");
+	Check(panel, "Range bands", Round, Get("bands"), Put("bands"), "Faint arcs at set distances inside it");
+	Stepper(panel, "Band every", function(d) return Round(d) and S().bands; end, Get("bandEvery"), Put("bandEvery"),
+		1, 1, 50, Yd, true);
+	Check(panel, "Band numbers", function(d) return Round(d) and S().bands; end, Get("bandNumbers"), Put("bandNumbers"),
+		"Each band's distance at its side");
 
 	Section(panel, "Size");
-	Stepper(panel, "Size override", Sized,
-		function() return S().length; end, function(v) S().length = v; end, 0.5, 0, 100,
+	Stepper(panel, "Size override", Sized, Get("length"), Put("length"), 0.5, 0, 100,
 		function(v) return v <= 0 and L("off (automatic)") or Yd(v); end, true);
-	Stepper(panel, "Radius", function(d) return not Sized(d); end,
-		function() return S().radius; end, function(v) S().radius = v; end, 0.5, 0.5, 100, Yd, true);
+	Stepper(panel, "Radius", function(d) return not Sized(d); end, Get("radius"), Put("radius"), 0.5, 0.5, 100, Yd, true);
 
-	Section(panel, "Appearance");
-	Choice(panel, "Style", nil, { { "smooth", "Smooth", 80 }, { "dots", "Dots", 60 } },
-		function() return S().style; end, function(v) S().style = v; end);
+	Section(panel, "Look");
+	Choice(panel, "Style", nil, { { "texture", "Texture", 70 }, { "smooth", "Drawn", 60 }, { "dots", "Dots", 50 } },
+		Get("style"), Put("style"));
 	Color(panel, "Outline colour", nil, "line");
-	Stepper(panel, "Outline opacity", nil, function() return S().line[4]; end, function(v) S().line[4] = v; end,
-		0.05, 0, 1, Pct);
+	Stepper(panel, "Outline opacity", nil, function() return S().line[4]; end,
+		function(v) S().line[4] = v; Mark("lineA"); end, 0.05, 0, 1, Pct);
+	Stepper(panel, "Outline width", function() return not Dotty(); end, Get("width"), Put("width"), 1, 1, 12, Px);
 	Color(panel, "Fill colour", nil, "fill");
-	Stepper(panel, "Fill opacity", nil, function() return S().fill[4]; end, function(v) S().fill[4] = v; end,
-		0.05, 0, 1, Pct);
-	Stepper(panel, "Outline width", function() return not Dotty(); end, function() return S().width; end,
-		function(v) S().width = v; end, 1, 1, 12, Px);
-	Check(panel, "Glow", function() return not Dotty(); end, function() return S().glow; end,
-		function(v) S().glow = v; end);
-	Stepper(panel, "Fill detail", function() return not Dotty(); end, function() return S().strip; end,
-		function(v) S().strip = v; end, 1, 1, 8, function(v) return string.format(L("%g px strips"), v); end);
-	Stepper(panel, "Dot size", Dotty, function() return S().size; end, function(v) S().size = v; end, 1, 1, 16, Px);
-	Stepper(panel, "Dot spacing", Dotty, function() return S().spacing; end, function(v) S().spacing = v; end,
-		1, 3, 40, Px);
+	Stepper(panel, "Fill opacity", nil, function() return S().fill[4]; end,
+		function(v) S().fill[4] = v; Mark("fillA"); end, 0.05, 0, 1, Pct);
+	Stepper(panel, "Fill detail", Drawn, Get("strip"), Put("strip"), 1, 1, 8,
+		function(v) return string.format(L("%g px strips"), v); end);
+	Stepper(panel, "Dot size", Dotty, Get("size"), Put("size"), 1, 1, 16, Px);
+	Stepper(panel, "Dot spacing", Dotty, Get("spacing"), Put("spacing"), 1, 3, 40, Px);
 	Choice(panel, "Fill style", function() return Dotty() and Filling(); end,
-		{ { "solid", "Solid", 70 }, { "front", "Front line only", 110 } },
-		function() return S().fillStyle; end, function(v) S().fillStyle = v; end);
+		{ { "solid", "Solid", 70 }, { "front", "Front line only", 110 } }, Get("fillStyle"), Put("fillStyle"));
 	Stepper(panel, "Fill spacing", function() return Dotty() and Filling() and S().fillStyle == "solid"; end,
-		function() return S().fillSpacing; end, function(v) S().fillSpacing = v; end, 1, 4, 60, Px);
+		Get("fillSpacing"), Put("fillSpacing"), 1, 4, 60, Px);
+	-- the minimap's pins (Guardians.lua): its rows alone
+	panel.tag = "pins";
+	local function Pins(d) return d.shape == "pins"; end
+	Section(panel, "Minimap");
+	Check(panel, "Guardians", Pins, Get("pinGuardians"), Put("pinGuardians"), "Asleep white, chasing you red");
+	Check(panel, "Lair timers", Pins, Get("pinTimers"), Put("pinTimers"), "An empty lair, and when it fills");
+	Check(panel, "Bosses", Pins, Get("pinBosses"), Put("pinBosses"), "Each boss alive");
+	Check(panel, "Caches", Pins, Get("pinCaches"), Put("pinCaches"), "Each cache not yet opened");
+	Check(panel, "Past the edge", Pins, Get("pinEdge"), Put("pinEdge"), "Kept on the rim, pointing their way");
+	Stepper(panel, "Pin size", Pins, Get("pinSize"), Put("pinSize"), 1, 6, 32, Px);
+	panel.tag = nil;
 	-- the mode and style change which rows show
 	table.insert(panel.refreshers, function() Layout(panel); end);
 end
@@ -1025,6 +1340,8 @@ local function BuildPanel()
 	ui.onoff = Button(panel, "", 64, 20, function()
 		local s = AST.Settings(selected);
 		s.enabled = not s.enabled;
+		s.hand = s.hand or {};
+		s.hand.enabled = true;
 		Refresh();
 	end);
 	ui.onoff:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -12, -10);
@@ -1068,6 +1385,7 @@ local function BuildPanel()
 	end);
 
 	SettingRows(panel);
+	Scrolls(panel, -(H - TOP - 10 - 42), 38);
 
 	-- Test hides this window while it plays, as the window sits over your hero.
 	local reopenAt;
@@ -1078,22 +1396,52 @@ local function BuildPanel()
 			win:Show();
 		end
 	end);
-	local test = Button(panel, "Test", 80, 22, function()
+	local test = Button(panel, "Test", 60, 22, function()
 		AST.preview[selected.id] = GetTime() + 3;
 		reopenAt = GetTime() + 3.2;
 		win:Hide();
 	end);
 	test:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 12, 10);
-	local reset = Button(panel, "Reset to defaults", 120, 22, function()
+	local reset = Button(panel, "Reset", 60, 22, function()
 		AST.ResetSettings(selected);
 		Refresh();
 	end);
 	reset:SetPoint("LEFT", test, "RIGHT", 6, 0);
-	local hint = Label(panel, "Test shows it for 3 seconds.");
-	hint:SetTextColor(0.5, 0.5, 0.55);
-	hint:SetPoint("LEFT", reset, "RIGHT", 10, 0);
-	-- one of your own rings: it can go (in the hint's place)
-	local remove = Button(panel, "Remove ring", 100, 22, function()
+	-- this one's look onto others: a small menu above the button
+	local menu = CreateFrame("Frame", nil, panel);
+	menu:SetBackdrop(FLAT);
+	menu:SetBackdropColor(0.08, 0.08, 0.11, 0.98);
+	menu:SetBackdropBorderColor(0.75, 0.55, 1, 1);
+	menu:SetWidth(232);
+	menu:SetHeight(82);
+	menu:SetFrameLevel((panel:GetFrameLevel() or 0) + 20);
+	menu:EnableMouse(true);
+	menu:Hide();
+	local copy = Button(panel, "Copy look to...", 120, 22, function()
+		if ( menu:IsShown() ) then
+			menu:Hide();
+		else
+			menu:Show();
+		end
+	end);
+	copy:SetPoint("LEFT", reset, "RIGHT", 6, 0);
+	menu:SetPoint("BOTTOMLEFT", copy, "TOPLEFT", 0, 4);
+	local note = Label(menu, "Style, colours, sizes and parts:");
+	note:SetTextColor(0.7, 0.7, 0.75);
+	note:SetPoint("TOPLEFT", menu, "TOPLEFT", 10, -8);
+	local toPage = Button(menu, "Every telegraph on this page", 212, 20, function() menu:Hide(); CopyLook("page"); end);
+	toPage:SetPoint("TOPLEFT", menu, "TOPLEFT", 10, -26);
+	local toAll = Button(menu, "Every telegraph, every class", 212, 20, function() menu:Hide(); CopyLook("all"); end);
+	toAll:SetPoint("TOPLEFT", toPage, "BOTTOMLEFT", 0, -4);
+	-- what a copy did, for a few seconds
+	local said = Label(panel, "");
+	said:SetTextColor(0.4, 1, 0.5);
+	said:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 14, 38);
+	table.insert(panel.live, function()
+		said:SetText(( ui.said and ui.saidAt and GetTime() - ui.saidAt < 5 ) and ui.said or "");
+	end);
+	-- one of your own rings: it can go
+	local remove = Button(panel, "Remove ring", 90, 22, function()
 		if ( selected and selected.custom ) then
 			AST.RemoveRing(selected);
 			ShowPage(page);
@@ -1103,10 +1451,14 @@ local function BuildPanel()
 	table.insert(panel.refreshers, function()
 		if ( selected.custom ) then
 			remove:Show();
-			hint:Hide();
 		else
 			remove:Hide();
-			hint:Show();
+		end
+		if ( selected.shape == "lab" ) then
+			copy:Hide();
+			menu:Hide();
+		else
+			copy:Show();
 		end
 	end);
 end
@@ -1148,14 +1500,222 @@ local function BuildGeneral()
 		return problem or string.format(L("%d pieces on screen"), quads);
 	end);
 
+	-- everything as it came, asked first
+	Section(g, "Start over");
+	Actions(g, "Defaults", nil, { { "Reset everything to defaults", function()
+		Confirm(L("Every telegraph on every page, and the settings on this page, go back to their defaults. Your own rings stay, with their settings reset too. This can't be undone."),
+			"Reset everything", function()
+				ResetEverything();
+				Refresh();
+			end);
+	end } });
+
 	Section(g, "Commands");
 	Text(g, "/ast", nil, function() return L("opens this window"); end);
 	Text(g, "/ast ring 10", nil, function() return L("a 10 yd custom ring around you (/ast ring turns it on or off)"); end);
 	Text(g, "/ast debug", nil, function() return L("what the addon reads, for when a telegraph doesn't show"); end);
 	Text(g, "/ast meter", nil, function() return L("your talents as the meter lists them"); end);
 	Text(g, "/ast share", nil, function() return L("import or export telegraph setups"); end);
+	Text(g, "/ast showcase", nil, function() return L("all your telegraphs at once, turning round you, for a video (again to stop)"); end);
+	Text(g, "/ast lab", function() return DB().labTab; end, function() return L("the Lab's commands (fps, textest)"); end);
+	Scrolls(g, -(H - TOP - 10 - 10), 6);
 	Layout(g);
+	table.insert(g.refreshers, function() Layout(g); end);
 end
+
+---------------------------------------------------------------------------------------------
+-- The All telegraphs page: one change to many telegraphs at a time. Each is written into every
+-- telegraph it reaches; afterwards each one's own page sets it differently, and a setting changed
+-- there stays (unless "Keep my own" is off).
+
+-- A colour to give many telegraphs: its swatch, the presets, the colour picker, and Apply.
+local function BulkColor(panel, label, key, apply)
+	local row = Row(panel, label, nil);
+	local function C()
+		local b = AST.State().ui.bulk;
+		b[key] = b[key] or { 1, 1, 1 };
+		return b[key];
+	end
+	local swatch = row:CreateTexture(nil, "OVERLAY");
+	AST.SetPiece(swatch, SOLID);
+	swatch:SetWidth(18);
+	swatch:SetHeight(18);
+	swatch:SetPoint("LEFT", row, "LEFT", CX, 0);
+	local function SetRGB(r, g, b)
+		local c = C();
+		c[1], c[2], c[3] = r, g, b;
+		Refresh();
+	end
+	local x = CX + 26;
+	for i = 1, table.getn(PRESETS) do
+		local pc = PRESETS[i];
+		local b = CreateFrame("Button", nil, row);
+		b:SetWidth(14);
+		b:SetHeight(14);
+		b:SetPoint("LEFT", row, "LEFT", x, 0);
+		local t = b:CreateTexture(nil, "OVERLAY");
+		AST.SetPiece(t, SOLID);
+		t:SetVertexColor(pc[1], pc[2], pc[3], 1);
+		t:SetAllPoints(b);
+		b:SetScript("OnClick", function() SetRGB(pc[1], pc[2], pc[3]); end);
+		x = x + 17;
+	end
+	if ( ColorPickerFrame ) then
+		local pick = Button(row, "Pick", 40, 18, function()
+			local c = C();
+			local before = { r = c[1], g = c[2], b = c[3] };
+			ColorPickerFrame.hasOpacity = nil;
+			ColorPickerFrame.previousValues = before;
+			ColorPickerFrame.func = function()
+				SetRGB(ColorPickerFrame:GetColorRGB());
+			end;
+			ColorPickerFrame.cancelFunc = function()
+				SetRGB(before.r, before.g, before.b);
+			end;
+			ColorPickerFrame:SetColorRGB(c[1], c[2], c[3]);
+			if ( ShowUIPanel ) then
+				ShowUIPanel(ColorPickerFrame);
+			else
+				ColorPickerFrame:Show();
+			end
+		end);
+		pick:SetPoint("LEFT", row, "LEFT", x + 4, 0);
+		x = x + 48;
+	end
+	local go = Button(row, "Apply", 50, 18, function() apply(C()); end);
+	go:SetPoint("LEFT", row, "LEFT", x + 6, 0);
+	table.insert(panel.refreshers, function()
+		local c = C();
+		swatch:SetVertexColor(c[1], c[2], c[3], 1);
+	end);
+	return row;
+end
+
+local function BuildAll()
+	local a = Box(win);
+	ui.all = a;
+	a:SetPoint("TOPLEFT", win, "TOPLEFT", NAV_W + 18, -TOP);
+	a:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -10, 10);
+	a.rows, a.refreshers, a.live, a.top = {}, {}, {}, -4;
+	local function DB() return (AST.State()); end
+	DB().ui.bulk = DB().ui.bulk or {};
+	local function Scope() return DB().ui.bulkScope or "mine"; end
+	-- fn(def, settings) on every telegraph the page reaches (false: not that one)
+	local function Each(key, fn) Bulk(Reach(Scope()), key, fn); end
+	local function Set(key, v) return function() Each(key, function(d, s) s[key] = v; end); end; end
+	local function Sized(d) return d.sizePattern ~= nil or d.radius ~= nil or d.radii ~= nil or d.sizeOf ~= nil; end
+
+	Section(a, "Which telegraphs");
+	Choice(a, "Change", nil, { { "mine", "Your class + Any class", 150 }, { "all", "Every class", 90 }, { "rings", "Your own rings", 100 } },
+		Scope, function(v) DB().ui.bulkScope = v; end);
+	Check(a, "Keep my own", nil, function() return DB().ui.bulkLeave ~= false; end, function(v) DB().ui.bulkLeave = v; end,
+		"Leave what I changed on a telegraph's own page");
+	Actions(a, "Set by hand", nil, { { "Forget which ones I set by hand", function()
+		Bulk(Reach(Scope()), "", function(d, s) s.hand = nil; end);
+	end } });
+	Text(a, "Done", nil, function() return ui.said or L("Nothing changed yet."); end);
+
+	Section(a, "Quick changes");
+	Actions(a, "Every one", nil, { { "Turn on", Set("enabled", true) }, { "Turn off", Set("enabled", false) } });
+	-- a mode only where the telegraph has it
+	local function Mode(m)
+		return function()
+			Each("mode", function(d, s)
+				for i = 1, table.getn(d.modes or {}) do
+					if ( d.modes[i] == m ) then
+						s.mode = m;
+						return true;
+					end
+				end
+				return false;
+			end);
+		end;
+	end
+	Actions(a, "When", nil, { { "Briefly on cast", Mode("cast") }, { "Always + cooldown fill", Mode("cooldown") },
+		{ "When it goes off", Mode("proc") } });
+	Actions(a, "Style", nil, { { "Texture", Set("style", "texture") }, { "Drawn", Set("style", "smooth") },
+		{ "Dots", Set("style", "dots") } });
+
+	-- each part on or off everywhere
+	Section(a, "Parts");
+	local PARTS = { { "Outline", "lineOn" }, { "Glow", "glow" }, { "Fill", "fillOn" }, { "Background area", "areaOn" },
+		{ "Front line", "frontOn" }, { "Cast pulse", "pulseOn" }, { "Cooldown fill", "cdFill" },
+		{ "Duration fill", "durFill" }, { "Uptime look", "uptime" }, { "Edge wall", "wallOn" }, { "Mark enemies", "marks" },
+		{ "Range bands", "bands" }, { "Band numbers", "bandNumbers" } };
+	for i = 1, table.getn(PARTS) do
+		local part = PARTS[i];
+		Actions(a, part[1], nil, { { "On", Set(part[2], true) }, { "Off", Set(part[2], false) } });
+	end
+
+	-- a number for every one: set it, then Apply
+	Section(a, "Numbers");
+	local function Number(label, key, step, lo, hi, fmt, start, apply)
+		local row = Stepper(a, label, nil, function()
+				local b = DB().ui.bulk;
+				if ( b[key] == nil ) then
+					b[key] = start;
+				end
+				return b[key];
+			end,
+			function(v) DB().ui.bulk[key] = v; end, step, lo, hi, fmt, true);
+		local go = Button(row, "Apply", 50, 18, function()
+			local v = DB().ui.bulk[key] or start;
+			Each(key, function(d, s) return apply(d, s, v); end);
+		end);
+		go:SetPoint("LEFT", row, "LEFT", CX + 160, 0);
+	end
+	local function Plain(key) return function(d, s, v) s[key] = v; end; end
+	Number("Outline width", "width", 1, 1, 12, Px, 3, Plain("width"));
+	Number("Outline opacity", "lineA", 0.05, 0, 1, Pct, 1, function(d, s, v) s.line[4] = v; end);
+	Number("Fill opacity", "fillA", 0.05, 0, 1, Pct, 0.3, function(d, s, v) s.fill[4] = v; end);
+	Number("Flash length", "flash", 0.1, 0.1, 5, function(v) return string.format(L("%.1f sec"), v); end, 0.6, Plain("flash"));
+	Number("Fill detail", "strip", 1, 1, 8, function(v) return string.format(L("%g px strips"), v); end, 3, Plain("strip"));
+	Number("Dot size", "size", 1, 1, 16, Px, 5, Plain("size"));
+	Number("Dot spacing", "spacing", 1, 3, 40, Px, 9, Plain("spacing"));
+	Number("Size override", "length", 0.5, 0, 100, function(v) return v <= 0 and L("off (automatic)") or Yd(v); end, 0,
+		function(d, s, v) if ( not Sized(d) ) then return false; end s.length = v; end);
+	Number("Ring radius", "radius", 0.5, 0.5, 100, Yd, 8,
+		function(d, s, v) if ( Sized(d) ) then return false; end s.radius = v; end);
+	Number("Wall height", "wallHeight", 0.25, 0.25, 5, Yd, 1, Plain("wallHeight"));
+	Number("Band every", "bandEvery", 1, 1, 50, Yd, 5, Plain("bandEvery"));
+	Number("Most at once", "most", 1, 0, 40, function(v) return v <= 0 and L("no limit") or string.format(L("%d rings"), v); end, 0,
+		function(d, s, v) if ( d.shape ~= "enemy" ) then return false; end s.most = v; end);
+
+	Section(a, "Colours");
+	BulkColor(a, "Outline colour", "line", function(c)
+		Each("line", function(d, s) s.line[1], s.line[2], s.line[3] = c[1], c[2], c[3]; end);
+	end);
+	BulkColor(a, "Fill colour", "fill", function(c)
+		Each("fill", function(d, s) s.fill[1], s.fill[2], s.fill[3] = c[1], c[2], c[3]; end);
+	end);
+	-- back to each one's own colours (their opacity stays)
+	local function Own(key)
+		return function(d, s)
+			local c = ( d.defaults and d.defaults[key] ) or AST.common[key];
+			s[key][1], s[key][2], s[key][3] = c[1], c[2], c[3];
+		end;
+	end
+	Actions(a, "Own colours", nil, { { "Each one's own outline colour", function() Each("line", Own("line")); end },
+		{ "Each one's own fill colour", function() Each("fill", Own("fill")); end } });
+
+	-- the ones it reaches back as they came, asked first (everything: the General page)
+	Section(a, "Start over");
+	Actions(a, "Defaults", nil, { { "Reset every one to its defaults", function()
+		local defs = Reach(Scope());
+		Confirm(string.format(L("The %d telegraphs chosen above go back to their defaults, the settings you changed on their own pages too. This can't be undone."),
+			table.getn(defs)), "Reset them", function()
+				for i = 1, table.getn(defs) do
+					AST.ResetSettings(defs[i]);
+				end
+				ui.said, ui.saidAt = string.format(L("Reset %d telegraphs to their defaults."), table.getn(defs)), GetTime();
+				Refresh();
+			end);
+	end } });
+
+	Scrolls(a, -(H - TOP - 10 - 10), 6);
+	table.insert(a.refreshers, function() Layout(a); end);
+end
+
 
 ---------------------------------------------------------------------------------------------
 -- The window
@@ -1183,6 +1743,23 @@ local function BuildHeader()
 	-- telegraph setups out and in
 	local shareButton = Button(win, "Import / Export", 96, 22, function() AST.OpenShare(); end);
 	shareButton:SetPoint("RIGHT", hideAll, "LEFT", -6, 0);
+	-- the showcase (Showcase.lua): all your telegraphs at once, turning round you, for a video
+	local showcase = Button(win, "Stop showcase", 96, 22, function()
+		if ( AST.showcase ) then
+			AST.showcase.Toggle();
+		end
+	end);
+	showcase:SetPoint("RIGHT", shareButton, "LEFT", -6, 0);
+	showcase:SetScript("OnEnter", function()
+		showcase:SetBackdropBorderColor(1, 0.82, 0, 1);
+		GameTooltip:SetOwner(showcase, "ANCHOR_BOTTOM");
+		GameTooltip:SetText(L("Shows all your telegraphs at once as one big telegraph turning round you, each with its whole look, until you stop it."));
+		GameTooltip:Show();
+	end);
+	showcase:SetScript("OnLeave", function()
+		showcase:SetBackdropBorderColor(0.4, 0.4, 0.5, 1);
+		GameTooltip:Hide();
+	end);
 	local rule = Rule(win, 0.15);
 	rule:SetPoint("TOPLEFT", win, "TOPLEFT", 10, -46);
 	rule:SetPoint("TOPRIGHT", win, "TOPRIGHT", -10, -46);
@@ -1204,6 +1781,12 @@ local function BuildHeader()
 	table.insert(refreshers, function()
 		local db, _, myClass = AST.State();
 		hideAll.text:SetText(db.hidden and L("Show all") or L("Hide all"));
+		showcase.text:SetText(( AST.showcase and AST.showcase.on ) and L("Stop showcase") or L("Showcase"));
+		if ( AST.showcase and AST.showcase.on ) then
+			showcase:SetBackdropColor(0.3, 0.18, 0.45, 0.95);
+		else
+			showcase:SetBackdropColor(0.12, 0.12, 0.16, 0.95);
+		end
 		local text = myClass and string.format(L("Playing %s"), Title(myClass)) or L("Your class isn't known yet");
 		if ( db.hidden ) then
 			sub:SetText(string.format(L("%s. Every telegraph is hidden: Show all brings them back."), text));
@@ -1251,6 +1834,7 @@ local function Build()
 	BuildList();
 	BuildPanel();
 	BuildGeneral();
+	BuildAll();
 	-- the texts that change on their own, four times a second
 	local acc = 0;
 	win:SetScript("OnUpdate", function()
@@ -1267,11 +1851,11 @@ local function Build()
 				ShowPage(page);
 			end
 		end
-		local live = page == "general" and ui.general.live or (selected and ui.panel.live) or {};
+		local live = ( page == "general" and ui.general.live ) or ( page == "all" and ui.all.live ) or (selected and ui.panel.live) or {};
 		for i = 1, table.getn(live) do
 			live[i]();
 		end
-		if ( page ~= "general" and ui.paint ) then
+		if ( page ~= "general" and page ~= "all" and ui.paint ) then
 			ui.paint();
 		end
 	end);
@@ -1283,30 +1867,41 @@ ShowPage = function(p)
 	local db, _, myClass = AST.State();
 	page = p;
 	db.ui.page = p;
-	if ( p == "general" ) then
+	if ( p == "general" or p == "all" ) then
 		ui.list:Hide();
 		ui.panel:Hide();
-		ui.general:Show();
-		ui.pageIcon:SetTexture(ICONS.general);
-		ui.pageTitle:SetText(L("General"));
+		if ( p == "general" ) then
+			ui.all:Hide();
+			ui.general:Show();
+			ui.pageIcon:SetTexture(ICONS.general);
+			ui.pageTitle:SetText(L("General"));
+			ui.pageSub:SetText(L("Settings for the addon as a whole."));
+		else
+			ui.general:Hide();
+			ui.all:Show();
+			ui.all.offset = 0;
+			ui.pageIcon:SetTexture(ICONS.addon);
+			ui.pageTitle:SetText(L("All telegraphs"));
+			ui.pageSub:SetText(L("Change many at once; then set any one differently on its own page."));
+		end
 		ui.pageTitle:SetTextColor(1, 0.82, 0);
-		ui.pageSub:SetText(L("Settings for the addon as a whole."));
 		ui.pageNote:SetText("");
 		selected = nil;
 	else
 		ui.general:Hide();
+		ui.all:Hide();
 		ui.list:Show();
 		ui.panel:Show();
 		local r = AST.registry[p] or {};
 		local defs = PageDefs(p);
-		local c = p == "common" and { 1, 0.82, 0 } or ClassColor(p);
+		local c = ( p == "common" and { 1, 0.82, 0 } ) or ( p == "lab" and { 0.75, 0.55, 1 } ) or ClassColor(p);
 		ui.pageIcon:SetTexture(p == "common" and ICONS.common or (r.icon or ICONS.class));
-		ui.pageTitle:SetText(p == "common" and L("Any class") or Title(p));
+		ui.pageTitle:SetText(( p == "common" and L("Any class") ) or ( p == "lab" and "Lab" ) or Title(p));
 		ui.pageTitle:SetTextColor(c[1], c[2], c[3]);
 		local sub = r.blurb and L(r.blurb) or string.format(L("%d telegraphs."), table.getn(defs));
 		if ( p ~= "common" and p == myClass ) then
 			sub = sub .. " " .. L("You're playing this class.");
-		elseif ( p ~= "common" ) then
+		elseif ( p ~= "common" and p ~= "lab" ) then
 			sub = sub .. " " .. string.format(L("They show when you play %s."), Title(p));
 		end
 		ui.pageSub:SetText(sub);
@@ -1331,7 +1926,7 @@ ShowPage = function(p)
 		end
 	end
 	Refresh();
-	local live = p == "general" and ui.general.live or (selected and ui.panel.live) or {};
+	local live = ( p == "general" and ui.general.live ) or ( p == "all" and ui.all.live ) or (selected and ui.panel.live) or {};
 	for i = 1, table.getn(live) do
 		live[i]();
 	end
@@ -1513,6 +2108,10 @@ function AST.ToggleOptions()
 	elseif ( win:IsShown() ) then
 		win:Hide();
 	else
+		-- a question left open when the window closed isn't asked again
+		if ( ui.confirm ) then
+			ui.confirm:Hide();
+		end
 		win:Show();
 		ShowPage(StartPage());
 	end

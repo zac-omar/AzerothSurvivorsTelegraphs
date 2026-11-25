@@ -96,6 +96,7 @@ If you also run Priest Telegraphs, this addon leaves the telegraphs that both ad
 | **Spell range** | Always (off by default) | How far your targeted spells look for enemies, from their tooltips |
 | **Pendant of the Plague** | Where an enemy dies with your Shadow Word: Pain (or Devouring Plague) on it, while you wear it | 7 yd |
 | **Shadowform burst** | Where an enemy dies with your Shadow Word: Pain on it, with the Shadowform capstone | 6 yd |
+| **Lightwell** | On the ground around the Lightwell, where you stood when it rose, for as long as it stands (off by default) | How far it strikes, from its tooltip |
 
 ### Shaman
 
@@ -103,6 +104,7 @@ If you also run Priest Telegraphs, this addon leaves the telegraphs that both ad
 |---|---|---|
 | **Fire Nova** | Briefly on each cast (or always, filling from the centre with its cooldown) | Read from its tooltip |
 | **Magma Totem** | On the ground around the totem, beside you where you dropped it, for as long as it stands | Read from its tooltip |
+| **Searing Totem** | On the ground around the totem, beside you where you dropped it, for as long as it stands (off by default) | How far it shoots, from its tooltip |
 | **Flametongue Weapon** | With Flametongue Weapon: flashes when Rockbiter sets off a free Fire Nova | Your Fire Nova's size |
 | **Emberwake Pendant** | While you wear it: around each Flame Shock tick's target | 6 yd |
 | **Heart of the Earthbreaker** | While you wear it: around the first target of each Rockbiter Weapon | 6 yd |
@@ -160,11 +162,33 @@ If you also run Priest Telegraphs, this addon leaves the telegraphs that both ad
 
 Spells that cover a spot of the ground for a while get a ring there that fills in until the spell ends.
 
-- **Set at your feet when you cast it** (Consecration, Immolation Trap, Frost Trap, Magma Totem): the ring goes where you stood when your spell bar showed the cast (Magma Totem 1.5 yd ahead of you, where the totem stands), and stays there. These are on by default.
+- **Set at your feet when you cast it** (Consecration, Immolation Trap, Frost Trap, Magma Totem; Searing Totem and Lightwell, off by default): the ring goes where you stood when your spell bar showed the cast (the totems 1.5 yd ahead of you, where they stand), and stays there. The first four are on by default.
 - **Lands on a group** *(experimental)* (Blizzard, Flamestrike, Volley, Rain of Fire, Hurricane): it lands on the thickest group of enemies in reach. Of the 24 enemies nearest you within its range, that's the one with the most enemies around it. The ring appears as soon as your spell bar shows the cast, placed from where the enemies stood when the spell went off, and it stays there. Which enemy wins depends on the spell's exact size, and the tooltip rounds it (to the yard from 10 yd up). So the addon works it out from which enemies each one hits and which it just misses, and uses that for the casts after. The first cast or two of a run, or after the spell gets bigger, can land a little off.
 - **Free ones** *(experimental)* (Rain of Chaos, Hallowed Ground's Consecration, Wyvern Sting's and Counterattack's traps): your spell bar doesn't show these, so each is placed by its first tick, a quarter second after it went down. Your own casts of the same spell hit exactly like the free ones, so a free one shows only while its spell's own telegraph (Rain of Fire, Consecration, Immolation Trap) is on too: that's how it tells your casts' ticks from the free ones'.
 
 Every ring lasts exactly as long as its spell: the tooltip's duration, made exact (the tooltip rounds to the second from 10 sec up), with every bonus, plus the moment the last tick still lands. If a tick ever lands later, the ring runs on with it.
+
+### Every other skill
+
+Every skill without a telegraph above has one of its own too, under **Ranges** on its class's page. They're all off by default:
+
+- **Range** (the skills that strike, afflict or fire at enemies): how far the skill reaches for an enemy, read from its tooltip. It shows always, filling in with the skill's cooldown, or briefly on each cast. Your Area doesn't widen a reach.
+- **Trigger** (the buffs cast "once enemies are within 30 yd"): how near enemies must come before the buff goes off.
+- **A flash round you** (the heals and shields with no reach): a small ring that flashes on each cast.
+
+| Class | Range | Trigger | Flash |
+|---|---|---|---|
+| Warrior | Mortal Strike, Execute, Bloodthirst, Rend, Shield Slam | Battle Shout | |
+| Paladin | Exorcism, Hammer of Wrath, Holy Shock, Judgement, Hammer of Justice | Holy Shield | Holy Light, Divine Shield |
+| Hunter | Auto Shot, Arcane Shot, Multi-Shot, Serpent Sting, Concussive Shot, Aimed Shot | | |
+| Rogue | Sinister Strike, Eviscerate, Rupture, Kidney Shot, Gouge, Ghostly Strike, Backstab, Seal Fate | Adrenaline Rush, Slice and Dice | |
+| Priest | Smite, Shadow Word: Pain, Mind Blast, Holy Fire, Devouring Plague | | Renew, Power Word: Shield |
+| Shaman | Lightning Bolt, Chain Lightning, Earth Shock, Flame Shock, Frost Shock, Stormstrike, Rockbiter Weapon | Lightning Shield | Healing Wave |
+| Mage | Fireball, Frostbolt, Arcane Missiles, Fire Blast, Pyroblast | | Ice Barrier |
+| Warlock | Shadow Bolt, Corruption, Immolate, Curse of Agony, Death Coil, Searing Pain, Drain Life, Fear, Soulfire | Demonic Empowerment | |
+| Druid | Wrath, Moonfire, Starfire, Insect Swarm, Entangling Roots, Faerie Fire, Shred | Thorns | Rejuvenation, Regrowth |
+
+Seal Fate, Soulfire and Faerie Fire also show once the damage meter lists them in your loadout: as a plain ring if your spell bar has no cooldown for them.
 
 ### Armor sets
 
@@ -187,6 +211,11 @@ Not shown: the T0.5 sets' 4-piece bonuses that change a size (Splitting Ice 7 yd
 | **Revive range** | In co-op, around each downed teammate; fills as you bring them back. Stand inside it to revive (6 sec, 9 at Heroic 5+; faster with more friends) | 5 yd |
 | **Custom ring** | A ring of any size around you (off by default; `/ast ring 10` sets it to 10 yd) | Your setting |
 | **Custom ring 2, 3, ...** | As many more as you like: **Add a ring** under the list. Any class rings show for every hero; a class page has its own, shown while you play that class | Your setting |
+| **Guardian wake range** | Around each guardian asleep at its lair: come this near (or hit it) and it wakes. It warms to red as you close in | 20 yd |
+| **Guardian leash** | Around the lair of a guardian that's chasing you: past this ring it gives up, walks home and heals to full. It warms to red as you near it, with a line under your hero ("gives up in 8 yd") | 97.5 yd from its lair |
+| **Minimap pins** | On the minimap: guardians (white asleep, red when chasing you), empty lairs with the time until they fill, bosses and caches. Ones past the minimap's edge wait on its rim | |
+
+Guardians: one asleep at its lair wakes when it's hit, or when a hero comes within 20 yd of it. Once awake it follows you while you're within 97.5 yd of its lair (not of the guardian). Go past that and it gives up, walks home and heals back to full health. Hit it on the way and it turns around. On its way home, coming near doesn't wake it; only a hit does. In a party it first turns to another hero still within reach of its lair.
 
 Telegraphs stand still while the game does: while you choose an upgrade or a chest's prize, and on the pause screen. Nothing fills or runs out meanwhile, and they carry on when you're back. A **Test** press still plays.
 
@@ -207,6 +236,7 @@ The addon follows the game's own language setting (**Options > Language** in the
 The options window has a tab for each page down its left side:
 
 - **General**: the minimap button, reading your talents from the meter, cone direction, and the commands.
+- **All telegraphs**: change many telegraphs at once (see [All telegraphs](#all-telegraphs) below).
 - **One tab per class**, yours first and marked "you". The window always opens on yours. You can set up another class's telegraphs before you play it.
 - **Any class**, below the classes: the telegraphs any hero can use (amulets, racials, co-op revives, the custom ring).
 
@@ -218,17 +248,51 @@ A class page lists its telegraphs under **Spells**, **Talents**, **Amulets** and
 - **Amber**: on, but waiting: your hero doesn't have it right now, or (a free one) its spell's own telegraph is off, so it isn't drawn. Point at the dot to see what it needs.
 - **Red**: off.
 
-Click a telegraph to see what it shows, its size right now, whether your hero has it, and its settings:
+Click a telegraph to see what it shows, its size right now, whether your hero has it, and its settings (scroll for more):
 
-- **When**: briefly on cast, or always with a cooldown fill.
-- **Cooldown fill**, **Duration fill** and **Uptime look**, each on its own: untick one to drop that time from the telegraph. Without the cooldown fill an always-on ring stays plain (a cast still sends out its shockwave). Without the duration fill a ground spot is drawn whole for as long as it lasts. Without the uptime look a ring that moves with you shows its time running out instead of its comets.
-- **Flash length**, and **Most at once** for the enemy effects: a limit on how many rings are drawn when a pack dies together. Off by default; set it if your frame rate drops.
-- **Size override** (or **Radius**, for the custom ring), if you'd rather set a size yourself: step it with - and + (Shift for bigger steps, or the mouse wheel), or click the number and type any size up to 100 yd, such as 27.5. It takes effect as you type; Enter or a click elsewhere keeps it, Escape puts the old one back. A size override of 0 goes back to the automatic size.
-- **Style**: *Smooth* (solid fills and outlines with a glow) or *Dots*, with their own options.
-- **Colours and opacity** for the outline and the fill, with presets or a colour picker.
-- **Test** shows the telegraph for 3 seconds so you can see your changes. **Reset to defaults** puts that telegraph back as it came.
+- **Behaviour**
+  - **When**: briefly on cast, or always with a cooldown fill (or when it goes off).
+  - **Flash length**, and **Most at once** for the enemy effects: a limit on how many rings are drawn when a pack dies together.
+  - **Cooldown fill**, **Duration fill** and **Uptime look**: untick one to drop that time from the telegraph.
+- **Parts**: each part of the telegraph on or off, and off means gone entirely (no need to set an opacity to 0):
+  - **Outline**: the ring's (or cone's) edge.
+  - **Glow**: the soft light along the edge.
+  - **Fill**: the area itself, and what fills it in.
+  - **Background area**: the faint area still to fill, behind a cooldown or duration fill.
+  - **Front line**: the bright line the fill has reached.
+  - **Cast pulse**: the flash and shockwave of each cast.
+- **Size**: **Size override** (or **Radius**, for your own rings): step it with - and +, or click the number and type any size up to 100 yd, such as 27.5. A size override of 0 goes back to the automatic size.
+- **Look**
+  - **Style**: *Texture* (rings from the game's own fine ring texture: smooth, glowing and sharp at any size, the standard look), *Drawn* (drawn from pieces) or *Dots*, each with its own options.
+  - **Colours, opacity and width** for the outline and the fill, with presets or a colour picker.
+- **Test** shows the telegraph for 3 seconds. **Reset** puts that telegraph back as it came. **Copy look to...** gives this telegraph's style, colours, sizes and parts to every telegraph on this page, or to every telegraph of every class.
+
+### All telegraphs
+
+The **All telegraphs** tab changes many telegraphs in one click. Each change is written into every telegraph it reaches, so afterwards you can open any one of them and set it differently.
+
+- **Change**: your class and Any class, every class, or only your own rings.
+- **Keep my own** (on to start with): leaves alone anything you changed on a telegraph's own page, so your own touches stick when you change everything else. **Forget which ones I set by hand** clears that.
+- **Quick changes**: turn every one on or off; set every one to *Briefly on cast*, *Always + cooldown fill* or *When it goes off* (each one that has it); every one's style.
+- **Parts**: each part on or off everywhere at once.
+- **Numbers**: pick a value, then **Apply**: outline width and opacity, fill opacity, flash length, fill detail, dot size and spacing, size override, ring radius, most at once.
+- **Colours**: one outline or fill colour for every one, or back to each one's own colours.
+- **Start over**: reset the telegraphs it reaches to their defaults (it asks first).
+
+**Reset everything to defaults**, at the bottom of the **General** tab, puts every telegraph on every page and the General settings back as they came. It asks first, in case of a misclick. Your own rings stay (their settings are reset too), and so do where the window and the minimap button sit.
+
+Telegraphs start out as just their ring: a thin outline, with no fill, no cooldown or duration filling it in, and no glow. The brief flashes (a cast, a proc, an enemy effect) are a little brighter than the rings that are always up (ranges, your own rings). Turn on a telegraph's **Fill**, **Glow**, **Cooldown fill** or **Duration fill** on its page, or for all of them at once on the All telegraphs tab. If you've used an older version, your telegraphs keep the look they had: **Reset everything to defaults** gives you the new one.
 
 **Hide all** (top right of the window, or right-click the minimap button) turns every telegraph off and on again without losing your settings.
+
+**Showcase** (top of the window, or `/ast showcase`) shows everything the addon draws at once, for a video or a screenshot. It is one big telegraph turning round your hero:
+
+- your class's main ring at the centre, filling with its cooldown on a rune circle;
+- its cone sweeping round;
+- its other telegraphs orbiting one way, and Any class's (amulets, racials, revive, guardians, skill ranges, your own rings) the other;
+- your spell range round it all, with two comets circling it.
+
+Each one shows its whole look in its own colours, and its name as it comes round to the front. The minimap pins play too. It sizes itself to fit your screen and runs until you press **Stop showcase** or type the command again. Your telegraphs pause while it runs, and none of your settings change.
 
 If your frame rate drops, lower **Fill detail**, turn off **Glow**, or set **Most at once**.
 
@@ -265,6 +329,7 @@ It starts in a free spot on the minimap's edge, clear of the other buttons there
 | `/ast events` | Show the last combat hit and the items and talents it detected |
 | `/ast spotlog` | Start or stop recording where the ground spells land, what they hit, the sizes worked out and how late the spell bar was, to report a ring that's off; `/reload` saves it to the settings file |
 | `/ast mirror`, `/ast rotate <degrees>` | Fix a cone that points the wrong way |
+| `/ast showcase` | Start or stop the showcase (see below) |
 
 ## Adding a class
 

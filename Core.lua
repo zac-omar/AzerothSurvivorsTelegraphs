@@ -26,9 +26,14 @@
 --     stand, a trap, `offset` yd ahead of where you face; freeFall: one that falls without a
 --     cast of the spell it is, that telegraph's id: placed by its first tick; follows: the key
 --     (an armor set's) that makes its spots move with you) or
---     "downed" (around downed teammates);
+--     "downed" (around downed teammates), "world" (places it finds itself: points(now) lists
+--     { x, y, z, ... } in the world, demo(t) a Test press's near you, draw(j, p, now) draws
+--     j.points; Guardians.lua) or "pins" (shown on the minimap, never in the world);
 --   modes: { "cast", "cooldown" } when it can show either way;
---   spellKey: its key in AZS_SPELLS (its cooldown and casts);
+--   spellKey: its key in AZS_SPELLS (its cooldown and casts); unlisted: a skill that list may not
+--     show (Seal Fate): known by `match` (the meter's ability list) too, then a plain ring;
+--   of, ofFmt, descFmt: the skill a ring is of and the formats its name and line are made with
+--     (Skills.lua), so the options can put each part in the game's language;
 --   tipNames, sizePattern: the action bar tooltips to read its size from; base, reachTalent,
 --     reachPerRank: the formula when none can be read (unscaled: base is a reach, which your
 --     Area doesn't widen; areaItem: the key of an item whose "+N% area" widens it too);
@@ -49,8 +54,9 @@
 --     whose hits these are not }); clock: a talent's own timer ({ names, every: seconds });
 --   needName: what to tell a hero without it; defaults: its settings to start with.
 -- A "ground" telegraph that picks its spot, or is placed by its first tick (freeFall), is
--- experimental (its spot can be off): it's marked so in the options and starts off. One set at
--- your feet when the spell list shows its cast is where you stood then, and isn't.
+-- experimental (its spot can be off): it's marked so in the options and starts off, unless it's
+-- `trusted` (none is now). One set at your feet when the spell list shows its cast is where you stood
+-- then, and isn't.
 -- extras: gear = { { text on an item, key it gives } }, dots = { key = { spells, names, keys } },
 --   auras = { { key, textures, spells, name } }; icon: the class's tab icon; blurb: a line under
 --   its page's heading.
@@ -78,7 +84,7 @@ function AST_Register(class, defs, extras)
 			end
 		end
 		defs[i].group = class;
-		if ( defs[i].shape == "ground" and ( defs[i].freeFall or not defs[i].atFeet ) ) then
+		if ( defs[i].shape == "ground" and ( defs[i].freeFall or not defs[i].atFeet ) and not defs[i].trusted ) then
 			defs[i].experimental = true;
 			defs[i].defaults = defs[i].defaults or {};
 			defs[i].defaults.enabled = false;
@@ -108,18 +114,31 @@ local PRIEST_TELEGRAPHS = { mind_flay = true, holy_nova = true, chastise = true,
 local skipped = {};
 
 local COMMON = {
-	enabled = true, mode = "cooldown", style = "smooth", flash = 0.6,
-	line = { 1, 1, 1, 1 }, fill = { 1, 1, 1, 0.3 },
-	width = 3, glow = true, strip = 3,                                     -- Smooth
-	size = 5, spacing = 9, fillSpacing = 12, fillStyle = "solid",          -- Dots
+	enabled = true, mode = "cooldown", style = "texture", flash = 0.6,
+	-- subdued to start with (people like them quiet): a 2 px outline, no glow, small dots
+	line = { 1, 1, 1, 0.8 }, fill = { 1, 1, 1, 0.15 },
+	width = 2, glow = false, strip = 3,                                    -- Smooth
+	size = 4, spacing = 10, fillSpacing = 12, fillStyle = "solid",         -- Dots
 	length = 0, radius = 8,
 	most = 0,                                                              -- enemy effects: 0 = no cap
-	cdFill = true, durFill = true, uptime = true,                          -- the time it shows
+	-- every telegraph starts as just its ring (the user, 2026-11-24): no fill, no cooldown or
+	-- duration shown in it, no glow; each can be turned on on its page or the All telegraphs tab
+	cdFill = false, durFill = false, uptime = false,                       -- the time it shows
+	-- its parts, each of which can go entirely: the outline, the fill, the faint area still to fill,
+	-- the fill's bright front line, a cast's pulse and shockwave (the glow is `glow`). A settings
+	-- table without them (a Lab demo's) has them all: only false turns one off.
+	lineOn = true, fillOn = false, areaOn = true, frontOn = true, pulseOn = true,
+	-- depth helpers for rings round you and cones (fx.Depth), off to start with
+	wallOn = false, wallHeight = 1, bands = false, bandEvery = 5, bandNumbers = true, marks = false,
+	-- guardians (Guardians.lua): a ring's warning from warnAt yd before its edge, with a line of text;
+	-- the minimap's pins
+	warnAt = 15, warnText = true,
+	pinGuardians = true, pinBosses = true, pinCaches = true, pinTimers = true, pinEdge = true, pinSize = 14,
 };
 
 -- The two kinds of piece every shape is made of, white, tinted to its colours (SetPiece).
 local SOLID, ROUND = "solid", "round";
-local MAX_QUADS = 4000;
+local MAX_QUADS = 8000;
 local MAX_FILL_DOTS = 600;
 local MAX_STRIPS = 400;
 local SOFT_CAP = 70;
@@ -255,16 +274,18 @@ local function Quad(tex, x, y, w, h, c, alpha)
 		t:SetVertexColor(c[1], c[2], c[3], a);
 		t.r, t.g, t.b, t.a = c[1], c[2], c[3], a;
 	end
-	if ( t.w ~= w ) then
+	-- a piece where it was last frame (within a third of a unit: a shape round the hero holds still
+	-- on the screen) isn't moved or resized again: most of a still scene costs no calls
+	if ( not t.w or math.abs(t.w - w) > 0.33 or math.abs(t.h - h) > 0.33 ) then
 		t:SetWidth(w);
-		t.w = w;
-	end
-	if ( t.h ~= h ) then
 		t:SetHeight(h);
-		t.h = h;
+		t.w, t.h = w, h;
 	end
-	t:ClearAllPoints();
-	t:SetPoint("BOTTOMLEFT", WorldFrame, "BOTTOMLEFT", x, y);
+	if ( not t.x or math.abs(t.x - x) > 0.33 or math.abs(t.y - y) > 0.33 ) then
+		t:ClearAllPoints();
+		t:SetPoint("BOTTOMLEFT", WorldFrame, "BOTTOMLEFT", x, y);
+		t.x, t.y = x, y;
+	end
 	if ( not t.on ) then
 		t:Show();
 		t.on = true;
@@ -291,6 +312,9 @@ end
 -- the height above (below) the hero's feet the shape being drawn is at: 0 for one that goes out
 -- from the hero, the enemies' height for one on them, the ground's for a spot left there.
 local H = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, dz = 0 };
+-- True circles (the Lab's): H.round on; ell: the whole circle a shape began with (AddArc), which
+-- FillPoly can draw as one piece; ex, ey: that circle's points on the screen.
+H.round, H.ell, H.ex, H.ey, H.lod = false, { on = false, n = -1 }, {}, {}, 1;
 local scale = 10;      -- screen units per yard at the hero
 local anchor;          -- the entry projected from
 local requests = {};
@@ -514,20 +538,85 @@ local function Add(u, v)
 	return true;
 end
 
--- Points along an arc around (cu, cv), one every few screen units.
+-- Points along an arc around (cu, cv), one every few screen units (up to 256 with true circles).
 local function AddArc(cu, cv, r, a0, a1)
+	local most = H.round and 256 or 128;
 	local n = math.ceil(r * math.abs(a1 - a0) * scale / 5);
 	if ( n < 4 ) then
 		n = 4;
-	elseif ( n > 128 ) then
-		n = 128;
+	elseif ( n > most ) then
+		n = most;
+	end
+	-- a whole circle a shape begins with: FillPoly may draw it in one piece
+	local E = H.ell;
+	local full = math.abs(math.abs(a1 - a0) - 2 * PI) < 1e-3;
+	E.on = PN == 0 and full;
+	E.cu, E.cv, E.r = cu, cv, r;
+	-- reaching past the horizon (a big ring, the camera tilted up): the part in front of it, not
+	-- nothing. Its depth w along the circle is W0 + k7 cos a + k8 sin a; points nearer the horizon than
+	-- w = 0.05 are left out (they'd be far off the screen anyway). A whole circle starts where it is
+	-- furthest past, so the part in front is one run.
+	local k7, k8 = H[7] * r, H[8] * r;
+	local W0 = H[7] * cu + H[8] * cv + 1 + H[11] * H.dz;
+	local K = math.sqrt(k7 * k7 + k8 * k8);
+	if ( W0 - K < 0.05 ) then
+		E.on = false;
+		if ( W0 + K < 0.05 ) then
+			return false;
+		end
+		if ( full ) then
+			local back = math.atan2(-k8, -k7);
+			a0, a1 = back, back + ( a1 > a0 and 2 * PI or -2 * PI );
+		end
+		local added = 0;
+		for i = 0, n do
+			local a = a0 + (a1 - a0) * i / n;
+			local ca, sa = math.cos(a), math.sin(a);
+			if ( W0 + k7 * ca + k8 * sa >= 0.05 and Add(cu + r * ca, cv + r * sa) ) then
+				added = added + 1;
+			end
+		end
+		return added >= 2;
 	end
 	for i = 0, n do
 		local a = a0 + (a1 - a0) * i / n;
 		if ( not Add(cu + r * math.cos(a), cv + r * math.sin(a)) ) then
+			E.on = false;
 			return false;
 		end
 	end
+	E.n = PN;
+	return true;
+end
+
+-- A whole circle on the ground as one stretched round piece: exact when it shows on the screen as an
+-- upright ellipse (round the hero it does); false when it doesn't (at a slant, off to one side, or
+-- partly past the horizon), and the caller fills it with strips instead.
+H.Ellipse = function(cu, cv, r, c, alpha)
+	local xs, ys = H.ex, H.ey;
+	local x0, x1, y0, y1 = 1e9, -1e9, 1e9, -1e9;
+	for i = 1, 24 do
+		local a = (i - 1) * PI / 12;
+		local x, y = Map(cu + r * math.cos(a), cv + r * math.sin(a));
+		if ( not x ) then
+			return false;
+		end
+		xs[i], ys[i] = x, y;
+		x0, x1, y0, y1 = math.min(x0, x), math.max(x1, x), math.min(y0, y), math.max(y1, y);
+	end
+	local cx, cy, ax, ay = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2;
+	if ( ax < 1 or ay < 1 ) then
+		return false;
+	end
+	-- upright: each point within three quarters of a unit of the ellipse in that box
+	local big = math.max(ax, ay);
+	for i = 1, 24 do
+		local dx, dy = (xs[i] - cx) / ax, (ys[i] - cy) / ay;
+		if ( math.abs(math.sqrt(dx * dx + dy * dy) - 1) * big > 0.75 ) then
+			return false;
+		end
+	end
+	Quad(ROUND, x0, y0, x1 - x0, y1 - y0, c, alpha);
 	return true;
 end
 
@@ -537,6 +626,13 @@ local BK = {};
 local function FillPoly(c, alpha, strip)
 	if ( PN < 3 or c[4] * alpha <= 0.003 ) then
 		return;
+	end
+	if ( H.round ) then
+		-- true circles: a whole circle in one piece; anything else in finer strips
+		local E = H.ell;
+		if ( E.on and E.n == PN and H.Ellipse(E.cu, E.cv, E.r, c, alpha) ) then
+			return;
+		end
 	end
 	local ymin, ymax = PY[1], PY[1];
 	for i = 2, PN do
@@ -691,9 +787,155 @@ local function Sharp(i, closed)
 	return (ax * bx + ay * by) / (la * lb) < 0.8;
 end
 
--- Strokes the polyline PX/PY (closed: back to its first point).
+-- True circles' wide see-through strokes (a glow): the band either side of the line, filled with
+-- strips 3 units tall (soft and faint: the steps don't show), as overlapping round pieces would
+-- show their overlaps as blobs. PX/PY are
+-- put back after, for the stroke drawn over it. False when there's nothing to fill.
+H.sx, H.sy, H.ox, H.oy, H.ix, H.iy = {}, {}, {}, {}, {}, {};
+H.Band = function(closed, c, alpha, w)
+	local n = PN;
+	if ( n < 2 ) then
+		return false;
+	end
+	local sx, sy, ox, oy, ix, iy = H.sx, H.sy, H.ox, H.oy, H.ix, H.iy;
+	for i = 1, n do
+		sx[i], sy[i] = PX[i], PY[i];
+	end
+	local hw = w / 2;
+	for i = 1, n do
+		local p = i > 1 and i - 1 or ( closed and n or i );
+		local q = i < n and i + 1 or ( closed and 1 or i );
+		local dx, dy = sx[q] - sx[p], sy[q] - sy[p];
+		local l = math.sqrt(dx * dx + dy * dy);
+		if ( l < 1e-6 ) then
+			dx, dy, l = 1, 0, 1;
+		end
+		local nx, ny = -dy / l * hw, dx / l * hw;
+		ox[i], oy[i], ix[i], iy[i] = sx[i] + nx, sy[i] + ny, sx[i] - nx, sy[i] - ny;
+	end
+	-- one side, then back along the other (closed: the two loops joined by a step taken both ways,
+	-- which the even-odd fill cancels)
+	PN = 0;
+	for i = 1, n do
+		PN = PN + 1;
+		PX[PN], PY[PN] = ox[i], oy[i];
+	end
+	if ( closed ) then
+		PN = PN + 1;
+		PX[PN], PY[PN] = ox[1], oy[1];
+		PN = PN + 1;
+		PX[PN], PY[PN] = ix[1], iy[1];
+		for i = n, 2, -1 do
+			PN = PN + 1;
+			PX[PN], PY[PN] = ix[i], iy[i];
+		end
+		PN = PN + 1;
+		PX[PN], PY[PN] = ix[1], iy[1];
+	else
+		for i = n, 1, -1 do
+			PN = PN + 1;
+			PX[PN], PY[PN] = ix[i], iy[i];
+		end
+	end
+	H.ell.on = false;
+	FillPoly(c, alpha, 3);
+	for i = 1, n do
+		PX[i], PY[i] = sx[i], sy[i];
+	end
+	PN = n;
+	return true;
+end
+
+-- Strokes the polyline PX/PY (closed: back to its first point). True circles: round pieces close
+-- together along it, so it bends smoothly; each piece's opacity is such that the overlap of about
+-- w / step of them gives the stroke's, its edges fading off as they thin out.
 local function Stroke(closed, c, alpha, w)
 	if ( PN < 2 or c[4] * alpha <= 0.003 ) then
+		return;
+	end
+	if ( H.round ) then
+		local last = closed and PN or PN - 1;
+		-- how long it is on the screen (a big ring mostly off it costs only its part on it)
+		local total, lo, hiX, hiY = 0, -PAD, screenW + PAD, screenH + PAD;
+		for i = 1, last do
+			local j = i < PN and i + 1 or 1;
+			local x1, y1, x2, y2 = PX[i], PY[i], PX[j], PY[j];
+			if ( not ( ( x1 < lo and x2 < lo ) or ( x1 > hiX and x2 > hiX ) or ( y1 < lo and y2 < lo ) or ( y1 > hiY and y2 > hiY ) ) ) then
+				total = total + math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+			end
+		end
+		-- a wide see-through stroke (a glow) is filled as a band: round pieces would only look even a
+		-- quarter of a width apart. Unless the band costs more than twice that (a big ring mostly off
+		-- the screen still spans it all): one strip piece a side for each 3 units it spans
+		if ( w >= 7 and c[4] * alpha < 0.999 ) then
+			local y0, y1 = PY[1], PY[1];
+			for i = 2, PN do
+				y0, y1 = math.min(y0, PY[i]), math.max(y1, PY[i]);
+			end
+			local rows = (math.min(y1 + w, screenH) - math.max(y0 - w, 0)) / 3;
+			if ( rows * ( closed and 2 or 1 ) <= 2 * total / (w * 0.25) and H.Band(closed, c, alpha, w) ) then
+				return;
+			end
+		end
+		-- Each piece is round, or stretched along the line where it runs near level or upright and
+		-- bends gently: up to 4 widths long, as long as the line, tilted off the stretch, stays within
+		-- a tenth of its width and the bend keeps the piece's ends within a quarter unit of the curve.
+		-- Pieces are 0.6 of their length apart (0.5 when see-through, so their overlaps even out); a
+		-- crowded frame (H.lod, from the last one's count) spreads them up to 0.75; at most 1000.
+		local a = math.min(1, c[4] * alpha);
+		local gap = math.min(0.75, (a >= 0.999 and 0.6 or 0.5) * H.lod);
+		local least = math.max(0.75, total / 1000);
+		local t, hw = 0, w / 2;
+		for i = 1, last do
+			local j = i < PN and i + 1 or 1;
+			local x1, y1 = PX[i], PY[i];
+			local x2, y2 = PX[j], PY[j];
+			local dx, dy = x2 - x1, y2 - y1;
+			local len = math.sqrt(dx * dx + dy * dy);
+			local L = w;
+			local flat = math.abs(dx) >= math.abs(dy);
+			if ( len > 1e-6 ) then
+				local off = flat and dy / len or dx / len;
+				local s2 = off * off;
+				local e = s2 > 1e-6 and math.sqrt(1 + 0.21 / s2) or 4;
+				-- the bend into the next piece of the line
+				local k = j < PN and j + 1 or ( closed and 1 or nil );
+				if ( k and ( closed or j < PN ) ) then
+					local ex, ey = PX[k] - x2, PY[k] - y2;
+					local len2 = math.sqrt(ex * ex + ey * ey);
+					local turn = len2 > 1e-6 and math.abs(dx * ey - dy * ex) / (len * len2) or 0;
+					if ( turn > 1e-4 ) then
+						e = math.min(e, math.sqrt(2 * len / turn) / w);
+					end
+				end
+				L = w * math.max(1, math.min(4, e));
+			end
+			local step = math.max(least, L * gap);
+			local per = a >= 0.999 and 1 / c[4] or (1 - math.pow(1 - a, step / L)) / c[4];
+			if ( ( x1 < lo and x2 < lo ) or ( x1 > hiX and x2 > hiX ) or ( y1 < lo and y2 < lo ) or ( y1 > hiY and y2 > hiY ) ) then
+				-- off the screen: past it, keeping the spacing
+				if ( t <= len ) then
+					t = t + math.ceil((len - t) / step + 1e-9) * step;
+				end
+			else
+				local hl = L / 2;
+				while ( t <= len ) do
+					local f = len > 0 and t / len or 0;
+					local px, py = x1 + dx * f, y1 + dy * f;
+					if ( flat ) then
+						Quad(ROUND, px - hl, py - hw, L, w, c, per);
+					else
+						Quad(ROUND, px - hw, py - hl, w, L, c, per);
+					end
+					t = t + step;
+				end
+			end
+			t = t - len;
+		end
+		local per = a >= 0.999 and 1 / c[4] or (1 - math.pow(1 - a, 0.5)) / c[4];
+		if ( not closed ) then
+			Quad(ROUND, PX[PN] - hw, PY[PN] - hw, w, w, c, per);
+		end
 		return;
 	end
 	local last = PN - 1;
@@ -715,7 +957,9 @@ local function Outline(closed, st, alpha, wide)
 	if ( st.glow ) then
 		Stroke(closed, st.line, alpha * 0.22, w * 3);
 	end
-	Stroke(closed, st.line, alpha, w);
+	if ( st.lineOn ~= false ) then
+		Stroke(closed, st.line, alpha, w);
+	end
 end
 
 local function Bright(c)
@@ -763,7 +1007,7 @@ local function DotFill(cu, cv, front, a0, a1, st, alpha)
 	-- a filled sector of radius R at spacing s takes about angle * (R / s)^2 / 2 dots: widen the
 	-- spacing when zoomed in, so the fill stays under MAX_FILL_DOTS
 	local spacing = math.max(st.fillSpacing, front * scale * math.sqrt(math.abs(a1 - a0) / 2 / MAX_FILL_DOTS));
-	if ( st.fillStyle == "solid" ) then
+	if ( st.fillStyle == "solid" and st.fillOn ~= false ) then
 		local step = spacing / scale;
 		local r = step;
 		while ( r < front - step * 0.5 ) do
@@ -771,30 +1015,37 @@ local function DotFill(cu, cv, front, a0, a1, st, alpha)
 			r = r + step;
 		end
 	end
-	DotArc(cu, cv, front, a0, a1, Bright(st.fill), alpha, st.size, st.spacing);
+	if ( st.frontOn ~= false ) then
+		DotArc(cu, cv, front, a0, a1, Bright(st.fill), alpha, st.size, st.spacing);
+	end
 end
 
 ---------------------------------------------------------------------------------------------
 -- Telegraphs
 
--- job: def, st, alpha, size, facing, progress (0..1, the cooldown), since (seconds since a cast)
+-- job: def, st, alpha, size, facing, progress (0..1, the cooldown), since (seconds since a cast).
+-- Each part only when its setting has it: the outline (lineOn, glow), the fill (fillOn), the faint
+-- area still to fill (areaOn), the fill's front line (frontOn), a cast's pulse (pulseOn).
 local function DrawCone(job)
 	local st, alpha, L = job.st, job.alpha, job.size;
 	local h = job.def.halfAngle * PI / 180;
 	local a0, a1 = job.facing - h, job.facing + h;
 	local p = job.progress;
+	local fill, area, front = st.fillOn ~= false, st.areaOn ~= false, st.frontOn ~= false;
 	local pulse = 0;
-	if ( job.since and job.since < 0.35 ) then
+	if ( job.since and job.since < 0.35 and st.pulseOn ~= false ) then
 		pulse = 1 - job.since / 0.35;
 	end
 	if ( st.style == "dots" ) then
-		local x, y = Map(0, 0);
-		if ( x ) then
-			Dot(x, y, st.line, alpha, st.size);
+		if ( st.lineOn ~= false ) then
+			local x, y = Map(0, 0);
+			if ( x ) then
+				Dot(x, y, st.line, alpha, st.size);
+			end
+			DotRay(L, a0, st.line, alpha, st);
+			DotRay(L, a1, st.line, alpha, st);
+			DotArc(0, 0, L, a0, a1, st.line, alpha, st.size, st.spacing);
 		end
-		DotRay(L, a0, st.line, alpha, st);
-		DotRay(L, a1, st.line, alpha, st);
-		DotArc(0, 0, L, a0, a1, st.line, alpha, st.size, st.spacing);
 		if ( p and p > 0 ) then
 			DotFill(0, 0, L * p, a0, a1, st, alpha);
 		end
@@ -802,7 +1053,7 @@ local function DrawCone(job)
 	end
 	if ( p ) then
 		-- what is still to fill, faint (the band from the fill's front out); what has filled, full
-		if ( p < 1 ) then
+		if ( p < 1 and area ) then
 			PN = 0;
 			local ok = AddArc(0, 0, L, a0, a1);
 			if ( ok and p > 0 ) then
@@ -815,10 +1066,10 @@ local function DrawCone(job)
 			end
 		end
 		PN = 0;
-		if ( p > 0 and Add(0, 0) and AddArc(0, 0, L * p, a0, a1) ) then
+		if ( fill and p > 0 and Add(0, 0) and AddArc(0, 0, L * p, a0, a1) ) then
 			FillPoly(st.fill, alpha * (1 + pulse), st.strip);
 		end
-	else
+	elseif ( fill ) then
 		PN = 0;
 		if ( Add(0, 0) and AddArc(0, 0, L, a0, a1) ) then
 			FillPoly(st.fill, alpha * (1 + pulse), st.strip);
@@ -828,7 +1079,7 @@ local function DrawCone(job)
 	if ( Add(0, 0) and AddArc(0, 0, L, a0, a1) ) then
 		Outline(true, st, alpha, 1 + pulse * 0.6);
 	end
-	if ( p and p > 0 and p < 1 ) then
+	if ( front and p and p > 0 and p < 1 ) then
 		PN = 0;
 		if ( AddArc(0, 0, L * p, a0, a1) ) then
 			Stroke(false, Bright(st.fill), alpha, st.width);
@@ -837,20 +1088,23 @@ local function DrawCone(job)
 end
 
 -- A ring at (cu, cv) yards from the hero: filled, outlined, `progress` filling it from the centre
--- out.
+-- out; each part as DrawCone has them.
 local function DrawCircleAt(cu, cv, R, st, alpha, p, since)
+	local fill, area, front, pulsing = st.fillOn ~= false, st.areaOn ~= false, st.frontOn ~= false, st.pulseOn ~= false;
 	local pulse = 0;
-	if ( since and since < 0.35 ) then
+	if ( since and since < 0.35 and pulsing ) then
 		pulse = 1 - since / 0.35;
 	end
 	if ( st.style == "dots" ) then
-		DotArc(cu, cv, R, 0, 2 * PI, st.line, alpha, st.size, st.spacing);
+		if ( st.lineOn ~= false ) then
+			DotArc(cu, cv, R, 0, 2 * PI, st.line, alpha, st.size, st.spacing);
+		end
 		if ( p and p > 0 ) then
 			DotFill(cu, cv, R * p, 0, 2 * PI, st, alpha);
-		elseif ( not p and st.fill[4] > 0 ) then
+		elseif ( not p and st.fill[4] > 0 and fill ) then
 			DotFill(cu, cv, R, 0, 2 * PI, st, alpha * 0.5);
 		end
-		if ( since and since < 0.4 ) then
+		if ( pulsing and since and since < 0.4 ) then
 			DotArc(cu, cv, R * (0.3 + 0.7 * since / 0.4), 0, 2 * PI, Bright(st.line), alpha * (1 - since / 0.4), st.size, st.spacing);
 		end
 		return;
@@ -858,18 +1112,18 @@ local function DrawCircleAt(cu, cv, R, st, alpha, p, since)
 	if ( p ) then
 		-- the whole area faint, what has filled full, and the fill's front a bright ring
 		PN = 0;
-		if ( p < 1 and AddArc(cu, cv, R, 0, 2 * PI) ) then
+		if ( area and p < 1 and AddArc(cu, cv, R, 0, 2 * PI) ) then
 			FillPoly(st.fill, alpha * 0.35, st.strip);
 		end
 		PN = 0;
-		if ( p > 0 and AddArc(cu, cv, R * p, 0, 2 * PI) ) then
+		if ( fill and p > 0 and AddArc(cu, cv, R * p, 0, 2 * PI) ) then
 			FillPoly(st.fill, alpha * (1 + pulse), st.strip);
 		end
 		PN = 0;
-		if ( p > 0 and p < 1 and AddArc(cu, cv, R * p, 0, 2 * PI) ) then
+		if ( front and p > 0 and p < 1 and AddArc(cu, cv, R * p, 0, 2 * PI) ) then
 			Stroke(true, Bright(st.fill), alpha, st.width);
 		end
-	else
+	elseif ( fill ) then
 		PN = 0;
 		if ( AddArc(cu, cv, R, 0, 2 * PI) ) then
 			FillPoly(st.fill, alpha * (1 + pulse), st.strip);
@@ -880,7 +1134,7 @@ local function DrawCircleAt(cu, cv, R, st, alpha, p, since)
 		Outline(true, st, alpha, 1 + pulse * 0.6);
 	end
 	-- a cast: a shockwave runs out to the edge
-	if ( since and since < 0.4 ) then
+	if ( pulsing and since and since < 0.4 ) then
 		PN = 0;
 		if ( AddArc(cu, cv, R * (0.3 + 0.7 * since / 0.4), 0, 2 * PI) ) then
 			Stroke(true, Bright(st.line), alpha * (1 - since / 0.4), st.width * 1.5);
@@ -889,21 +1143,23 @@ local function DrawCircleAt(cu, cv, R, st, alpha, p, since)
 end
 
 -- A spot on the ground that lasts: its whole area faint, filled from the centre out as its time
--- runs (grow 0 to 1).
+-- runs (grow 0 to 1); each part as DrawCone has them.
 local function DrawSpot(cu, cv, R, st, alpha, grow)
 	if ( st.style == "dots" ) then
-		DotArc(cu, cv, R, 0, 2 * PI, st.line, alpha, st.size, st.spacing);
+		if ( st.lineOn ~= false ) then
+			DotArc(cu, cv, R, 0, 2 * PI, st.line, alpha, st.size, st.spacing);
+		end
 		if ( grow > 0 ) then
 			DotFill(cu, cv, R * grow, 0, 2 * PI, st, alpha);
 		end
 		return;
 	end
 	PN = 0;
-	if ( grow < 1 and AddArc(cu, cv, R, 0, 2 * PI) ) then
+	if ( st.areaOn ~= false and grow < 1 and AddArc(cu, cv, R, 0, 2 * PI) ) then
 		FillPoly(st.fill, alpha * 0.35, st.strip);
 	end
 	PN = 0;
-	if ( grow > 0 and AddArc(cu, cv, R * grow, 0, 2 * PI) ) then
+	if ( st.fillOn ~= false and grow > 0 and AddArc(cu, cv, R * grow, 0, 2 * PI) ) then
 		FillPoly(st.fill, alpha, st.strip);
 	end
 	PN = 0;
@@ -1157,8 +1413,17 @@ local function UpdateCooldowns(now, dt, playing)
 					cds[key] = c;
 				end
 				-- Which way does `cd` run? Between two close lines it moves with the clock: down if it
-				-- is the time left (the usual), up if it is the time gone.
-				if ( c.lineCd and now - c.lineAt < 1.5 ) then
+				-- is the time left (the usual), up if it is the time gone. Only two lines well inside
+				-- the cooldown tell: a ready spell with nothing in reach retries every 0.2 sec, its
+				-- lines' cd a sawtooth under 0.2 that would count "up" as often as not and, over a
+				-- run's waits, turn the spell over (its casts then missed, its retries taken for casts).
+				-- And only two lines less than half a cooldown apart: two either side of a cast look just
+				-- like time gone when they are about half a cooldown apart (0.6 left, then 1.15 left of
+				-- 1.8 half a second on; it went off in between). With a short cooldown (Haste, cards) and
+				-- a line about once a second, most pairs are like that: Blizzard's and Flamestrike's
+				-- spots stopped after a few casts until a /reload.
+				if ( c.lineCd and now - c.lineAt < 1.5 and now - c.lineAt >= 0.2 and now - c.lineAt <= 0.45 * mx - 0.2
+					and math.min(cd, c.lineCd) >= 0.5 and math.abs(cd - c.lineCd) >= 0.15 ) then
 					local d, t = cd - c.lineCd, now - c.lineAt;
 					if ( d < -0.02 and math.abs(-d - t) < 0.3 ) then
 						c.down = c.down + 1;
@@ -1171,6 +1436,14 @@ local function UpdateCooldowns(now, dt, playing)
 				if ( c.up > c.down + 3 ) then
 					left = mx - cd;
 				end
+				-- the ground spells' lines, into the trail /ast debug saves: a jump up at once, else once a second
+				local T = AST.trail;
+				if ( T and T.keys[key] and ( not T.seen[key] or now - T.seen[key] >= 1 or ( c.left and left > c.left + 0.1 ) ) ) then
+					T.seen[key] = now;
+					AST.Trail(now, string.format("line %s cd %.2f max %.2f left %.2f was %s up %d down %d%s%s%s", key, cd, mx, left,
+						c.left and string.format("%.2f", c.left) or "-", c.up, c.down, c.waits and " waits" or "",
+						c.guessed and " guessed" or "", c.armed and " armed" or ""));
+				end
 				if ( c.left and left > c.left + 0.25 and left >= 0.5 * mx ) then
 					-- the cooldown started again: a cast (unless the local clock already called it). A
 					-- short wait while it is ready (a retry with nothing in range) is not one.
@@ -1178,6 +1451,9 @@ local function UpdateCooldowns(now, dt, playing)
 					-- when the line came, less what the cooldown shows run already (to the tenth).
 					c.sureAt = came - math.min(1, math.max(0, mx - left));
 					c.cameAt, c.ran = came, math.max(0, mx - left);
+					if ( AST.trail and AST.trail.keys[key] ) then
+						AST.Trail(now, string.format("cast %s seen by the line, at %.2f", key, c.sureAt));
+					end
 					if ( not c.castAt or now - c.castAt > 0.4 ) then
 						c.castAt = now;
 					end
@@ -1192,11 +1468,17 @@ local function UpdateCooldowns(now, dt, playing)
 					c.guessed = nil;
 					c.sureAt = came - math.min(1, math.max(0, mx - left));
 					c.cameAt, c.ran = came, math.max(0, mx - left);
+					if ( AST.trail and AST.trail.keys[key] ) then
+						AST.Trail(now, string.format("cast %s guessed and the line agrees, at %.2f", key, c.sureAt));
+					end
 				elseif ( c.guessed and now - c.guessed > 0.3 ) then
 					-- it wasn't: this spell waits for enemies in range once ready (Psychic Scream), so
 					-- for the rest of the run only the line says when it goes off. It's ready now.
 					c.waits, c.guessed = true, nil;
 					left = 0;
+					if ( AST.trail and AST.trail.keys[key] ) then
+						AST.Trail(now, "waits " .. key .. ": its guessed cast didn't come");
+					end
 				elseif ( c.left and c.left <= 0.05 and left < 0.5 * mx ) then
 					-- ready and waiting for an enemy in range: the line's short retries don't count it
 					-- down again, so the cooldown fill stays full
@@ -1286,8 +1568,10 @@ end
 --   bursts: def id -> { xs, ys }: the hits of a burst in this read of the feed
 --   bodies: where enemies died lately, the latest 24: { x, y, at, t: who, ev: the killing hit }
 --   past: the enemies seen lately (see Remember)
+--   blind: def id -> a cast of its that found no enemies to land on (its hits place its spot)
+--   read: what the last read of the enemy list gave (for /ast debug's trail)
 local fx = { learned = {}, killed = {}, dots = {}, procHit = {}, spotCast = {}, lags = {}, bursts = {},
-	bodies = {}, past = { reach = 0 } };
+	bodies = {}, past = { reach = 0 }, blind = {}, read = {} };
 
 -- Every key a meter source answers to: its name, item, talent and spell, and "item/<spell>"
 -- for an amulet that remakes a spell.
@@ -1847,26 +2131,66 @@ local function XY(x, y)
 	return string.format("%.1f,%.1f", x, y);
 end
 
+-- The query every page of a read is asked with: a page's cursor belongs to the query it came from,
+-- and the game refuses it with another ("this cursor belongs to another query"). Living enemies
+-- ("alive"; the game has no "living", which it refused, so page 1 came from a second query without
+-- the filter and page 2 was refused: once a run's list passed a page, mostly of the dead, the
+-- enemies near you weren't read and the ground spells' spots stopped). If the game won't take the
+-- filter, or its pages come back empty while there are enemies, every enemy (the dead are skipped
+-- here), for good. foeQn: the one in use; foeOk: "alive" has given enemies, so it's kept.
+fx.foeQ, fx.foeQn = { { kinds = FOES, states = { "alive" } }, { kinds = FOES } }, 1;
+
 -- The living enemies within `reach` yd of you, into t: t.xs, t.ys, t.zs, t.ids (the first t.n of
--- them) and where you stood (t.px, t.py, t.pz).
+-- them) and where you stood (t.px, t.py, t.pz). The game hands them out 256 at a time, in no order
+-- of distance (hasMore and a nextCursor while there are more): every page is read, all with the
+-- same query. A catalog that changes between pages is read again from the start, once.
 local function ReadFoes(p, reach, t)
-	local cursor;
+	local cursor, page, again = nil, 0, true;
 	t.n, t.px, t.py, t.pz = 0, p.x, p.y, p.z;
 	t.zs = t.zs or {};
-	for page = 1, 16 do
-		local res = AZS_GetWorldAnchors({ kinds = FOES, states = { "living" } }, cursor, 256);
-		if ( not res and page == 1 ) then
-			res = AZS_GetWorldAnchors({ kinds = FOES }, cursor, 256);
-		end
+	-- what the list gave, for the trail: enemies in it, pages, the nearest, ones with no position
+	local R = fx.read;
+	R.total, R.pages, R.nearest, R.nopos, R.over, R.err = 0, 0, nil, 0, nil, nil;
+	while ( page < 32 ) do
+		page = page + 1;
+		local res, err = AZS_GetWorldAnchors(fx.foeQ[fx.foeQn], cursor, 256);
 		local list = Entries(res);
-		if ( not list ) then
+		if ( page == 1 and fx.foeQn == 1 and ( ( not res and type(err) == "table" and err.code == "INVALID_ARGUMENT" )
+			or ( not fx.foeOk and list and table.getn(list) == 0 ) ) ) then
+			-- the filter refused, or (not yet seen working) nothing with it: try without it
+			local res2, err2 = AZS_GetWorldAnchors(fx.foeQ[2], nil, 256);
+			local list2 = Entries(res2);
+			if ( list2 and ( not res or table.getn(list2) > 0 ) ) then
+				fx.foeQn, res, err, list = 2, res2, err2, list2;
+			end
+		elseif ( fx.foeQn == 1 and list and table.getn(list) > 0 ) then
+			fx.foeOk = true;
+		end
+		R.pages = page;
+		if ( type(res) == "table" and res.overflowed ) then
+			R.over = true;
+		end
+		if ( not list and type(err) == "table" ) then
+			R.err = tostring(err.code) .. ( err.message and ( " (" .. tostring(err.message) .. ")" ) or "" );
+		end
+		if ( not list and cursor and again and type(err) == "table" and err.code == "CATALOG_CHANGED" ) then
+			again, cursor, page, t.n = false, nil, 0, 0;
+			list = {};
+		elseif ( not list ) then
 			break;
 		end
 		for i = 1, table.getn(list) do
 			local e = list[i];
+			if ( type(e) == "table" and FOE[e.kind] and not GONE[e.state] and e.positionAvailable == false ) then
+				R.nopos = R.nopos + 1;
+			end
 			if ( type(e) == "table" and FOE[e.kind] and not GONE[e.state] and e.positionAvailable ~= false
 				and type(e.x) == "number" and type(e.y) == "number" ) then
 				local dx, dy = e.x - p.x, e.y - p.y;
+				R.total = R.total + 1;
+				if ( not R.nearest or dx * dx + dy * dy < R.nearest ) then
+					R.nearest = dx * dx + dy * dy;
+				end
 				if ( dx * dx + dy * dy <= reach * reach ) then
 					t.n = t.n + 1;
 					t.xs[t.n], t.ys[t.n], t.ids[t.n] = e.x, e.y, e.unitId or e.anchorId or false;
@@ -1874,11 +2198,23 @@ local function ReadFoes(p, reach, t)
 				end
 			end
 		end
-		cursor = type(res) == "table" and res.hasMore and ( res.nextCursor or res.cursor );
-		if ( not cursor ) then
-			break;
+		if ( page > 0 ) then
+			-- the next page: while the answer names one (a new one, and this page wasn't empty)
+			local nxt = type(res) == "table" and res.hasMore ~= false and ( res.nextCursor or res.cursor );
+			if ( type(nxt) ~= "string" or nxt == "" or nxt == cursor or table.getn(list) == 0 ) then
+				break;
+			end
+			cursor = nxt;
 		end
 	end
+end
+
+-- What the last read of the enemy list gave, as text (for the trail).
+fx.ReadText = function()
+	local R = fx.read;
+	return string.format("list: %d enemies with a place, %d without, %d pages, nearest %s%s%s", R.total or 0, R.nopos or 0,
+		R.pages or 0, R.nearest and string.format("%.0f yd", math.sqrt(R.nearest)) or "none",
+		R.over and ", overflowed" or "", R.err and (", error " .. R.err) or "") .. ( fx.foeQn == 2 and ", unfiltered" or "" );
 end
 
 -- The enemies' heights, for where hits are: the living ones as last read (cur), and as read before
@@ -1905,6 +2241,154 @@ fx.FoeZ = function(x, y, p, now)
 		end
 	end
 	return z;
+end
+
+---------------------------------------------------------------------------------------------
+-- Depth helpers for rings round you and cones (each a setting of its own, off to start with): a
+-- see-through wall standing on the edge (wallOn, wallHeight yd), faint arcs every bandEvery yd
+-- with their distance (bands, bandNumbers), and a mark under every enemy inside (marks). Seen from
+-- low down a flat shape on the ground gets thin; these keep its reach readable.
+
+-- Texts on the screen this frame (the bands' numbers), from a pool: hidden when not used again.
+fx.texts = { list = {}, used = 0, shown = 0 };
+fx.Text = function(text, x, y, c, alpha)
+	local T = fx.texts;
+	T.used = T.used + 1;
+	local f = T.list[T.used];
+	if ( not f ) then
+		f = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
+		T.list[T.used] = f;
+	end
+	f:SetText(text);
+	f:SetTextColor(c[1], c[2], c[3], math.min(1, alpha));
+	f:ClearAllPoints();
+	f:SetPoint("CENTER", WorldFrame, "BOTTOMLEFT", x, y);
+	f:Show();
+end
+fx.TextsDone = function()
+	local T = fx.texts;
+	for i = T.used + 1, T.shown do
+		T.list[i]:Hide();
+	end
+	T.shown, T.used = T.used, 0;
+end
+
+-- A thin faint arc round you (a band, a wall's top): the ring texture's line in the Texture style
+-- (far fewer pieces than Core's for a thin see-through line); false where it can't be (then dotted).
+fx.ThinArc = function(R, a0, a1, st, c, alpha)
+	local tx = st.style == "texture" and AST.lab and AST.lab.tex;
+	return tx ~= nil and tx ~= false and tx.Arc ~= nil and tx.Arc(0, 0, R, math.max(1.5, st.width * 0.6), c, alpha, a0, a1) ~= false;
+end
+
+-- The wall on the edge of a ring R round you (a0..a1: a cone's arc): two bands, fainter as it
+-- rises, and a faint line along its top.
+fx.Wall = function(R, a0, a1, cone, st, alpha)
+	local hgt, c = st.wallHeight or 1, st.line;
+	for k = 0, 1 do
+		local z0, z1 = hgt * k / 2, hgt * (k + 1) / 2;
+		PN = 0;
+		H.dz = z0;
+		local ok = AddArc(0, 0, R, a0, a1);
+		H.dz = z1;
+		ok = ok and AddArc(0, 0, R, a1, a0);
+		H.dz = 0;
+		if ( ok ) then
+			FillPoly(c, alpha * ( k == 0 and 0.3 or 0.16 ), 3);
+		end
+	end
+	H.dz = hgt;
+	if ( not fx.ThinArc(R, a0, a1, st, c, alpha * 0.5) ) then
+		DotArc(0, 0, R, a0, a1, c, alpha * 0.5, 2, 5);
+	end
+	H.dz = 0;
+end
+
+-- Faint arcs every bandEvery yd inside a ring or cone, each with its distance at its side.
+fx.Bands = function(R, a0, a1, cone, st, alpha)
+	local every = math.max(1, st.bandEvery or 5);
+	local c = st.line;
+	local n = 0;
+	local d = every;
+	while ( d < R - 0.25 and n < 30 ) do
+		if ( not fx.ThinArc(d, a0, a1, st, c, alpha * 0.4) ) then
+			DotArc(0, 0, d, a0, a1, c, alpha * 0.5, 2, 7);
+		end
+		if ( st.bandNumbers ) then
+			-- just outside the cone's first side (a ring's: toward the screen's right)
+			local a = cone and a0 - 0.12 or 0;
+			local x, y = Map(d * math.cos(a), d * math.sin(a));
+			if ( x ) then
+				fx.Text(string.format("%g", d), x, y, c, alpha * 0.9);
+			end
+		end
+		d = d + every;
+		n = n + 1;
+	end
+end
+
+-- The enemies, for the marks: read about 30 times a second (they move).
+fx.foes = { xs = {}, ys = {}, zs = {}, ids = {}, n = 0, at = -1 };
+
+-- A mark under every enemy inside a ring R round you (or a cone a0..a1): a soft disc and a bright
+-- centre (texture rings: the ring texture, when the Lab's textures are there).
+fx.Marks = function(R, a0, a1, cone, st, alpha, p, now)
+	local F = fx.foes;
+	if ( now - F.at > 0.033 or now < F.at ) then
+		ReadFoes(p, R + 2, F);
+		F.at = now;
+	end
+	local c = st.line;
+	local mid, half = (a0 + a1) / 2, (a1 - a0) / 2;
+	local tex = st.style == "texture" and AST.lab and AST.lab.Ground;
+	for i = 1, F.n do
+		local u, v = F.xs[i] - p.x, F.ys[i] - p.y;
+		local inside = u * u + v * v <= R * R;
+		if ( inside and cone ) then
+			local da = math.atan2(v, u) - mid;
+			da = da - math.floor((da + PI) / (2 * PI)) * 2 * PI;
+			inside = math.abs(da) <= half;
+		end
+		if ( inside ) then
+			H.dz = F.zs[i] - p.z;
+			if ( tex ) then
+				AST.lab.Ground("Spells\\GENERICGLOW2_64", u, v, 0.9, 0, c, alpha * 0.55, "BLEND");
+				AST.lab.Ground("Spells\\Circle", u, v, 0.95 / 0.965, 0, c, alpha, "ADD");
+			else
+				-- one piece each where the ellipse stands upright, else filled as a polygon
+				if ( not H.Ellipse(u, v, 0.9, c, alpha * 0.4) ) then
+					PN = 0;
+					if ( AddArc(u, v, 0.9, 0, 2 * PI) ) then
+						FillPoly(c, alpha * 0.4, 3);
+					end
+				end
+				H.Ellipse(u, v, 0.32, Bright(c), alpha * 0.85);
+			end
+			H.dz = 0;
+		end
+	end
+end
+
+-- The depth helpers a ring or cone's settings ask for (after it is drawn, however it is drawn).
+fx.Depth = function(j, p, now)
+	local st = j.st.real or j.st;
+	if ( not ( st.wallOn or st.bands or st.marks ) or not j.size or j.size <= 0 ) then
+		return;
+	end
+	local cone = j.def.shape == "cone";
+	local a0, a1 = 0, 2 * PI;
+	if ( cone ) then
+		local h = j.def.halfAngle * PI / 180;
+		a0, a1 = j.facing - h, j.facing + h;
+	end
+	if ( st.bands ) then
+		fx.Bands(j.size, a0, a1, cone, st, j.alpha);
+	end
+	if ( st.wallOn ) then
+		fx.Wall(j.size, a0, a1, cone, st, j.alpha);
+	end
+	if ( st.marks ) then
+		fx.Marks(j.size, a0, a1, cone, st, j.alpha, p, now);
+	end
 end
 
 -- Where a hit shown at screen sx, sy is, and its height: where the line to it meets the ground at
@@ -1952,13 +2436,15 @@ fx.Aura = function(R, st, alpha, p, since, running, now)
 	local turn, tail, n = -now * 2 * PI / 8, 70 * PI / 180, 7;
 	local bright = Bright(st.line);
 	if ( st.style == "dots" ) then
-		DotArc(0, 0, R, 0, 2 * PI, st.line, alpha, st.size, st.spacing);
-		if ( st.fill[4] > 0 ) then
+		if ( st.lineOn ~= false ) then
+			DotArc(0, 0, R, 0, 2 * PI, st.line, alpha, st.size, st.spacing);
+		end
+		if ( st.fill[4] > 0 and st.fillOn ~= false ) then
 			DotFill(0, 0, R, 0, 2 * PI, st, alpha * 0.5 * breath);
 		end
 	else
 		PN = 0;
-		if ( AddArc(0, 0, R, 0, 2 * PI) ) then
+		if ( st.fillOn ~= false and AddArc(0, 0, R, 0, 2 * PI) ) then
 			FillPoly(st.fill, alpha * breath, st.strip);
 		end
 		PN = 0;
@@ -2340,7 +2826,13 @@ local function SpotHit(def, x, y, now, R, dur, ev, freed, z)
 			end
 		end
 	end
-	if ( not s and fx.spotCast[def.id] ) then
+	-- a cast that found no enemies to land on (the enemy list held none near you): its first hits
+	-- place its spot, as they do before the spell list has shown a cast
+	local blind = fx.blind[def.id];
+	if ( blind and now - blind > (def.firstTick or FIRST_TICK) + 2.5 ) then
+		fx.blind[def.id], blind = nil, nil;
+	end
+	if ( not s and fx.spotCast[def.id] and not blind ) then
 		-- a stray: the first few of each storm go in the spot log
 		if ( latest ) then
 			latest.strays = (latest.strays or 0) + 1;
@@ -2387,13 +2879,21 @@ local function SpotHit(def, x, y, now, R, dur, ev, freed, z)
 		table.insert(spots, s);
 	elseif ( not s ) then
 		local c = SpellOf(def);
-		if ( def.atFeet or freed or live >= ((c and c.max and c.max > 0) and math.ceil(dur / c.max) or 2) ) then
+		if ( def.atFeet or freed or ( not blind and live >= ((c and c.max and c.max > 0) and math.ceil(dur / c.max) or 2) ) ) then
 			-- one set at your feet shows only with its cast: its hits alone don't say where you stood;
 			-- with a free one out, hits with no cast are the free one's
 			return;
 		end
 		s = { id = def.id, at = now, dur = dur, x = x, y = y, z = z, xs = {}, ys = {} };
 		table.insert(spots, s);
+		if ( blind ) then
+			-- that cast's: shown at once (settling where its hits land for a second), ending when its
+			-- storm does
+			s.dur = math.max(1, dur - (now - blind));
+			s.shown, s.settle = true, now + 1;
+			fx.blind[def.id] = nil;
+			AST.Trail(now, "spot " .. def.id .. ": placed by its hits (its cast found no enemies)");
+		end
 	end
 	table.insert(s.xs, x);
 	table.insert(s.ys, y);
@@ -2410,7 +2910,7 @@ local function SpotHit(def, x, y, now, R, dur, ev, freed, z)
 		table.remove(s.ys, 1);
 	end
 	-- a cast's spot stays where the cast put it
-	if ( not s.cands and not s.shown ) then
+	if ( not s.cands and ( not s.shown or ( s.settle and now < s.settle ) ) ) then
 		s.x, s.y = Middle(s.xs, s.ys);
 		if ( s.zn ) then
 			s.z = s.zsum / s.zn;
@@ -2729,6 +3229,7 @@ local function CheckRun()
 		effectsRun = run;
 		fx.learned, rings, fx.killed, lastFire = {}, {}, {}, {};
 		fx.procHit, fx.dots, spots, fx.spotCast, sizes, fx.lags = {}, {}, {}, {}, {}, {};
+		fx.blind, fx.blindSaid = {}, nil;
 		for id in pairs(procs) do
 			procs[id] = nil;
 		end
@@ -2774,8 +3275,8 @@ local function SetupClass()
 	myClass = token;
 	DEFS, byId, GEAR, DOTS, AURAS, TALENT_KEYS, skipped = {}, {}, {}, {}, {}, {}, {};
 	local others = IsAddOnLoaded and IsAddOnLoaded("PriestTelegraphs");
-	local groups = { myClass, "common" };
-	for g = 1, 2 do
+	local groups = { myClass, "common", "lab" };
+	for g = 1, table.getn(groups) do
 		local r = REGISTRY[groups[g]];
 		if ( r ) then
 			for i = 1, table.getn(r.defs) do
@@ -2903,6 +3404,24 @@ local function DrawSpots(j, p, now)
 	end
 	local c = SpellOf(def);
 	local range, every, first = def.range or 30, def.every or 1, def.firstTick or FIRST_TICK;
+	local T = AST.trail;
+	if ( T and def.spellKey ) then
+		T.keys[Norm(def.spellKey)] = true;
+		if ( not T.state[def.id] or now - T.state[def.id] >= 2 or now < T.state[def.id] ) then
+			T.state[def.id] = now;
+			local alive = 0;
+			for k = 1, table.getn(spots) do
+				if ( spots[k].id == def.id and ( spots[k].cands or spots[k].shown ) ) then
+					alive = alive + 1;
+				end
+			end
+			AST.Trail(now, string.format("state %s: %d spots, size %.1f, lasts %.1f, %s, enemies kept %d (%s)", def.id, alive, j.size or -1,
+				j.dur or -1, c and string.format("cooldown %.2f of %.2f, sure %.1f ago%s", c.left or -1, c.max or -1,
+				c.sureAt and (now - c.sureAt) or -1, c.waits and ", waits" or "") or "not in the spell list",
+				table.getn(fx.past), fx.past[table.getn(fx.past)] and string.format("%d near, %.1f ago",
+				fx.past[table.getn(fx.past)].n or -1, now - fx.past[table.getn(fx.past)].at) or "none") .. "; " .. fx.ReadText());
+		end
+	end
 	-- a set that makes the spell move with you (Consecration with the Uncommon paladin set, Volley
 	-- with the Epic hunter set, Blizzard with the Epic mage set): its spots stay on you, so one cast
 	-- on a group comes to you at once
@@ -2967,6 +3486,17 @@ local function DrawSpots(j, p, now)
 			-- on an enemy: at its height
 			x, y, cands, most, best = LandingSpot(q, range, j.size);
 			z = best and best.z;
+		end
+		if ( T ) then
+			AST.Trail(now, string.format("spot %s: %s, %d candidates, %s near it, %.1f yd, from enemies %.2f sec off; %s", def.id,
+				x and XY(x - q.px, y - q.py) or "none", table.getn(cands or {}), tostring(most), j.size or -1, q.at - at, fx.ReadText()));
+		end
+		-- none to land on read near you: the cast's first hits place its spot (SpotHit)
+		fx.blind[def.id] = not x and at or nil;
+		if ( not x and not fx.blindSaid and fx.SaveDump ) then
+			-- the first time a run: a snapshot of what led to it, and a line saying so
+			fx.blindSaid = true;
+			fx.SaveDump(now, def);
 		end
 		SpotLog({ ev = "cast", id = def.id, hero = XY(q.px, q.py), spot = x and XY(x, y) or "none",
 			candidates = table.getn(cands), most = most, late = math.floor((now - at) * 100) / 100,
@@ -3086,6 +3616,10 @@ local function CollectJobs(now, inRun)
 	for i = 1, table.getn(DEFS) do
 		local def = DEFS[i];
 		local st = Settings(def);
+		-- the showcase (Showcase.lua) lays its fuller look over the settings while it plays one
+		if ( AST.showcase and AST.showcase.on ) then
+			st = AST.showcase.Look(def, st);
+		end
 		local test = preview[def.id] and real < preview[def.id];
 		local inf = info[def.id];
 		if ( not inf ) then
@@ -3117,6 +3651,11 @@ local function CollectJobs(now, inRun)
 			local c = SpellOf(def);
 			inf.known = c ~= nil;
 			inf.left, inf.max = c and c.left, c and c.max;
+			-- a skill the spell list may not show (unlisted): its being there tells your hero has it too
+			if ( def.unlisted and c and not has ) then
+				has, how = "listed", "the spell list";
+				inf.has, inf.how = has, how;
+			end
 			if ( c and c.castAt ) then
 				job.since = now - c.castAt;
 			end
@@ -3133,7 +3672,17 @@ local function CollectJobs(now, inRun)
 				local t = 3 - (preview[def.id] - real);
 				job.show = true;
 				job.alpha = math.min(1, (preview[def.id] - real) / 0.5);
-				if ( st.mode == "cooldown" ) then
+				if ( def.shape == "lab" ) then
+					-- a Lab experiment: its own demo
+					job.test = t;
+				elseif ( def.shape == "world" ) then
+					-- its own places near you (Guardians.lua)
+					job.points = def.demo and def.demo(t) or {};
+				elseif ( def.shape == "pins" ) then
+					-- shown on the minimap, not here
+					inf.test = t;
+					job.show = false;
+				elseif ( st.mode == "cooldown" ) then
 					-- two cooldowns of 1.5 seconds (with its fill turned off, two casts)
 					local cycle = t - math.floor(t / 1.5) * 1.5;
 					job.progress = st.cdFill and cycle / 1.5 or nil;
@@ -3146,6 +3695,16 @@ local function CollectJobs(now, inRun)
 				else
 					job.since = t;
 				end
+			elseif ( def.shape == "lab" ) then
+				-- a Lab experiment: drawn through the telegraphs it fits (Lab.lua)
+			elseif ( def.shape == "pins" ) then
+				-- on the minimap (Guardians.lua draws them)
+				inf.test = nil;
+			elseif ( def.shape == "world" ) then
+				-- places in the world it finds itself (a guardian's lair...), each drawn there
+				job.points = def.points(now) or {};
+				inf.count = table.getn(job.points);
+				job.show = inRun and inf.count > 0;
 			elseif ( def.match and not has and not def.showsItself ) then
 				-- an effect your hero doesn't have: nothing to draw
 			elseif ( def.shape == "downed" ) then
@@ -3188,6 +3747,9 @@ local function CollectJobs(now, inRun)
 							job.progress = 0;
 						end
 					end
+					job.show = inRun;
+				elseif ( def.unlisted and has ) then
+					-- not in the spell list, but the meter's ability list has it: a plain ring
 					job.show = inRun;
 				end
 			elseif ( st.mode == "shield" ) then
@@ -3247,25 +3809,50 @@ local function RenderJobs(now, jobs, active, watch, inRun)
 		facing = -facing;
 	end
 	facing = facing + (db.rotate or 0) * PI / 180;
+	-- the Lab (Lab.lua): its experiments that are on draw under, instead of or over the telegraphs
+	local lab = AST.lab;
+	if ( lab ) then
+		lab.Frame(now);
+	end
 	for i = 1, table.getn(jobs) do
 		local j = jobs[i];
-		if ( j.def.shape == "cone" ) then
-			j.facing = facing;
+		j.facing = facing;
+		if ( lab ) then
+			lab.Pre(j, p, now);
+		end
+		if ( lab and lab.Draw(j, p, now) ) then
+			-- an experiment drew it
+		elseif ( j.def.shape == "cone" ) then
 			DrawCone(j);
 		elseif ( j.def.shape == "circle" ) then
 			DrawCircleAt(0, 0, j.size, j.st, j.alpha, j.progress, j.since);
 		elseif ( j.def.shape == "downed" ) then
 			DrawDowned(j, p);
+		elseif ( j.def.shape == "world" ) then
+			j.def.draw(j, p, now);
 		elseif ( j.def.shape == "ground" ) then
 			DrawSpots(j, p, now);
 		else
 			DrawRings(j, p, now);
 		end
+		if ( j.def.shape == "cone" or j.def.shape == "circle" ) then
+			fx.Depth(j, p, now);
+		end
+		if ( lab ) then
+			lab.Post(j, p, now);
+		end
+	end
+	if ( lab ) then
+		lab.After(p, now);
 	end
 end
 
 local function Draw()
 	drawCalls = drawCalls + 1;
+	-- the Lab's FPS counter times each frame's telegraphs
+	if ( AST.lab ) then
+		AST.lab.Start();
+	end
 	local real = GetTime();
 	local dt = real - (lastNow or real);
 	lastNow = real;
@@ -3287,8 +3874,14 @@ local function Draw()
 	if ( ClassNow() ~= myClass ) then
 		SetupClass();
 	end
-	if ( not myClass or db.hidden ) then
+	-- Hide all: nothing, unless the showcase is playing (it leaves Hide all as it is)
+	if ( not myClass or ( db.hidden and not ( AST.showcase and AST.showcase.on ) ) ) then
+		-- every piece goes: Core's, the textures and the texts (they'd stay on the screen as they were)
 		FinishQuads();
+		if ( AST.lab ) then
+			AST.lab.Finish();
+		end
+		fx.TextsDone();
 		return;
 	end
 	local inRun = phase ~= nil and phase ~= "dead" and phase ~= "victory";
@@ -3300,7 +3893,14 @@ local function Draw()
 		RenderJobs(now, jobs, active, watch, inRun);
 	end
 	drawnQuads = used;
+	-- level of detail for true circles: past 2500 pieces, the next frames' outlines spread their
+	-- dots a little (eased, so it doesn't flicker); every shape is still drawn
+	H.lod = math.max(1, math.min(1.25, H.lod * 0.9 + 0.1 * H.lod * used / 2500));
 	FinishQuads();
+	if ( AST.lab ) then
+		AST.lab.Finish();
+	end
+	fx.TextsDone();
 end
 
 local function Start()
@@ -3328,8 +3928,37 @@ function AST.State()
 	return db, DEFS, myClass, skipped, byId;
 end
 
+-- What the Lab (Lab.lua) draws with: Core's own pieces, and what it knows.
+AST.draw = {
+	Map = Map, Unmap = Unmap, H = H, PI = PI, canvas = canvas, SOLID = SOLID, ROUND = ROUND,
+	Begin = function() PN = 0; end, Add = Add, AddArc = AddArc, FillPoly = FillPoly, Stroke = Stroke,
+	Outline = Outline, Bright = Bright, Quad = Quad, Dot = Dot, DotArc = DotArc, DotFill = DotFill,
+	Circle = DrawCircleAt, Cone = DrawCone, Spot = DrawSpot, Aura = fx.Aura, SpellOf = SpellOf,
+	Scale = function() return scale; end, Spots = function() return spots; end,
+	Rings = function() return rings; end, procs = procs, owned = owned, FIRST_TICK = FIRST_TICK,
+	Text = fx.Text, Entries = Entries, Depth = fx.Depth,
+};
+
 function AST.Stats()
 	return drawCalls, drawnQuads, lastError, spellKeys;
+end
+
+-- Always on: the ground spells' last 300 events (their spell lines, the casts seen, each spot placed or
+-- not, their state every 2 sec), which /ast debug saves (db.debugDump; /reload writes it) for when a
+-- spot telegraph stops showing.
+AST.trail = { n = 0, list = {}, keys = {}, seen = {}, state = {} };
+function AST.Trail(now, text)
+	local T = AST.trail;
+	T.list[T.n - math.floor(T.n / 300) * 300 + 1] = string.format("%.2f ", now) .. text;
+	T.n = T.n + 1;
+end
+function AST.TrailList()
+	local T, out = AST.trail, {};
+	local first = math.max(0, T.n - 300);
+	for i = first, T.n - 1 do
+		table.insert(out, T.list[i - math.floor(i / 300) * 300 + 1]);
+	end
+	return out;
 end
 
 -- Until Options.lua has loaded.
@@ -3507,8 +4136,31 @@ local function Dump(t)
 end
 
 -- What the addon reads, for working out why a telegraph doesn't show.
+-- A snapshot for the developer (/ast debug, or the first ground cast a run that finds no enemies
+-- in the game's list: `def`): the ground spells' trail and state, the enemy list as it is now.
+fx.SaveDump = function(now, def)
+	db.debugDump = { at = now, clockGap = clockGap, phase = tostring(AZS_GetPhase and AZS_GetPhase()),
+		run = tostring(AZS_ZONE and AZS_ZONE.run), spells = spellKeys, lastError = tostring(lastError),
+		spots = table.getn(spots), frames = table.getn(fx.past), trail = AST.TrailList(), list = fx.ReadText(),
+		why = def and ( def.name .. " found no enemies in the game's enemy list at its cast" ) or "/ast debug" };
+	if ( def ) then
+		Print(def.name .. "'s ring came from its hits this time: the game's enemy list had none near you at its cast ("
+			.. fx.ReadText() .. "). A snapshot is saved; /reload writes it to the settings file.");
+	end
+end
+
 local function PrintDebug()
 	local now = GetTime() - clockGap;
+	-- a snapshot for the developer: the ground spells' trail and state, the Lab's errors
+	local errs = {};
+	for id, e in pairs(AST.lab and AST.lab.errors or {}) do
+		table.insert(errs, id .. ": " .. tostring(e));
+	end
+	db.debugDump = { at = now, clockGap = clockGap, phase = tostring(AZS_GetPhase and AZS_GetPhase()),
+		run = tostring(AZS_ZONE and AZS_ZONE.run), spells = spellKeys, lastError = tostring(lastError),
+		spots = table.getn(spots), frames = table.getn(fx.past), labErrors = errs, trail = AST.TrailList() };
+	Print(string.format("saved a snapshot of the ground spells (%d events): /reload writes it to the settings file.",
+		table.getn(db.debugDump.trail)));
 	Print("class " .. tostring(myClass) .. ", " .. table.getn(DEFS) .. " telegraphs"
 		.. (table.getn(skipped) > 0 and (", left to Priest Telegraphs: " .. table.concat(skipped, ", ")) or ""));
 	Print("anchor: " .. (anchor and (tostring(anchor.kind) .. " " .. tostring(anchor.anchorId)) or "none")
@@ -3517,6 +4169,15 @@ local function PrintDebug()
 		.. ", last problem: " .. tostring(lastError or "none"));
 	Print("phase " .. tostring(AZS_GetPhase and AZS_GetPhase()) .. ", run " .. tostring(AZS_ZONE and AZS_ZONE.run)
 		.. ", area " .. tostring(AZS_STATS and AZS_STATS.area) .. ", spells line: " .. spellKeys);
+	-- the game's enemy list right now: what the ground spells land by (read afresh)
+	local p = AZS_GetPlayerPosition and AZS_GetPlayerPosition();
+	if ( p and AZS_GetWorldAnchors ) then
+		local t = { xs = {}, ys = {}, zs = {}, ids = {} };
+		ReadFoes(p, 30, t);
+		local line = string.format("enemy list now: %d within 30 yd of you; ", t.n) .. fx.ReadText();
+		Print(line);
+		db.debugDump.list = line;
+	end
 	for i = 1, table.getn(DEFS) do
 		local def = DEFS[i];
 		local c = SpellOf(def);
@@ -3526,7 +4187,8 @@ local function PrintDebug()
 			.. (inf and inf.size and string.format(", size %.1f yd (%s)", inf.size, tostring(inf.source)) or "")
 			.. (t and t.slot and (", tooltip in action slot " .. t.slot) or "")
 			.. (c and string.format(", cooldown %.2f of %.2f sec, last cast %.1f sec ago", c.left or -1, c.max or -1,
-				c.castAt and (now - c.castAt) or -1) or ""));
+				c.castAt and (now - c.castAt) or -1) or "")
+			.. (c and c.up > c.down + 3 and string.format(" (its line read as time gone: %d up, %d down)", c.up, c.down) or ""));
 	end
 end
 
@@ -3583,6 +4245,9 @@ SlashCmdList["ASTELEGRAPHS"] = function(msg)
 			db.meterOff = (rest == "off") or nil;
 		end
 		PrintMeter();
+	elseif ( cmd == "showcase" and AST.showcase ) then
+		-- /ast showcase: all your telegraphs at once round you, turning, until it's run again
+		AST.showcase.Toggle();
 	elseif ( cmd == "ring" and not byId.ring ) then
 		Print(table.getn(skipped) > 0 and "the custom ring is left to Priest Telegraphs: /ring there."
 			or "no custom ring yet: your class isn't known yet, try again in a moment.");
@@ -3597,6 +4262,8 @@ SlashCmdList["ASTELEGRAPHS"] = function(msg)
 			st.enabled = not st.enabled;
 		end
 		Print(string.format(AST_L(st.enabled and "ring on, %g yd." or "ring off, %g yd."), st.radius));
+	elseif ( cmd == "lab" and AST.lab ) then
+		AST.lab.Command(rest);
 	elseif ( cmd == "minimap" ) then
 		ShowMinimapButton(db.minimapHidden);
 		Print(db.minimapHidden and "minimap button hidden (/ast minimap brings it back)." or "minimap button shown.");
