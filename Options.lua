@@ -2267,6 +2267,8 @@ local function BuildHero()
 	h.subTag = "icons";
 	Section(h, "Icons");
 	Check(h, "Skills", nil, Get("skills"), Set("skills"), "Your spells on action bar 1 to 6.");
+	Check(h, "Only on cooldown", Yes("skills"), Get("skillsCooling"), Set("skillsCooling"),
+		"A skill shows from its cast until it's ready again.");
 	Check(h, "Jewelry", nil, Get("jewelry"), Set("jewelry"), "What you wear, with its own clock where it has one.");
 	Check(h, "Buffs", nil, Get("buffs"), Set("buffs"), "What's on you, with the time left.");
 	Stepper(h, "Most buffs", Yes("buffs"), Get("buffsMax"), Set("buffsMax"), 1, 1, 24, Count);
@@ -2454,14 +2456,28 @@ local function BuildTarget()
 		Get("namePos"), Set("namePos"));
 	Stepper(h, "Name size", Yes("name"), Get("nameSize"), Set("nameSize"), 1, 7, 24, Px);
 	Choice(h, "Name colour", Yes("name"), { { "kind", "By kind", 70 }, { "white", "White", 60 } }, Get("nameColor"), Set("nameColor"));
-	Check(h, "Its kind", Yes("name"), Get("kindTag"), Set("kindTag"), "Elite, Guardian or Boss after its name.");
+	Check(h, "Its kind", Yes("name"), Get("kindTag"), Set("kindTag"), "Elite, Guardian or Boss: on a row of its own, or after its name.");
+	-- the second row, beyond the name's (the user and their players, 2026-11-26)
+	local function Lined() return S().name and S().namePos ~= "inside"; end
+	Choice(h, "Its kind at", function() return Lined() and S().kindTag; end,
+		{ { "row", "Second row", 90 }, { "name", "By the name", 100 } }, Get("kindAt"), Set("kindAt"));
 	Check(h, "Its target", nil, Get("tot"), Set("tot"), "Whom it's after, at the right of its name.");
+	Choice(h, "Its target at", function() return Lined() and S().tot; end,
+		{ { "name", "Name's row", 90 }, { "row", "Second row", 90 }, { "auto", "Moves up if needed", 130 } },
+		Get("totAt"), Set("totAt"));
+	-- how whom it's after is shown (the user, 2026-11-26: not ">")
+	Choice(h, "Target mark", Yes("tot"), { { "sword", "Sword", 64 }, { "arrow", "Arrow", 60 }, { "word", "Word", 60 },
+		{ "none", "None", 56 } }, Get("totMark"), Set("totMark"));
+	Check(h, "Class colours", Yes("tot"), Get("totClass"), Set("totClass"), "A teammate's name in their class's colour.");
+	Check(h, "Warn when it's you", Yes("tot"), Get("totYou"), Set("totYou"), "\"You\" in the warning colour when it's after you.");
+	Color(h, "Warning colour", function() return S().tot and S().totYou; end, "totYouRGB", S);
 	Section(h, "Level");
 	Check(h, "Show level", nil, Get("level"), Set("level"), "Its level, with its name or by the bar.");
-	Choice(h, "Level at", Yes("level"), { { "name", "With the name", 110 }, { "left", "Left", 50 }, { "inside", "Inside", 60 } },
-		Get("levelPos"), Set("levelPos"));
-	Stepper(h, "Level size", function() return S().level and ( S().levelPos ~= "name" or not S().name ); end,
-		Get("levelSize"), Set("levelSize"), 1, 7, 24, Px);
+	Choice(h, "Level at", Yes("level"), { { "name", "Before the name", 110 }, { "after", "After the name", 100 },
+		{ "row", "Second row", 90 }, { "left", "Left", 50 }, { "inside", "Inside", 60 } }, Get("levelPos"), Set("levelPos"));
+	Stepper(h, "Level size", function()
+			return S().level and ( ( S().levelPos ~= "name" and S().levelPos ~= "after" ) or not S().name );
+		end, Get("levelSize"), Set("levelSize"), 1, 7, 24, Px);
 	Color(h, "Level colour", Yes("level"), "levelRGB", S);
 
 	h.subTag = "auras";

@@ -62,6 +62,8 @@ local DEF = {
 	shieldStyle = "amount", shieldMark = 25,
 	shield1 = { 0.35, 0.75, 1 }, shield2 = { 1, 0.78, 0.25 }, shield3 = { 0.85, 0.45, 1 },
 	skills = true, jewelry = true, buffs = false, buffsMax = 8,
+	-- a skill's icon only while it's on cooldown (the user, 2026-11-26)
+	skillsCooling = false,
 	iconSize = 22, iconGap = 3, iconSide = "below", iconRows = "each", iconAlign = "center",
 	-- cooldowns on the icons: off to start with (what you have, not when it's back); each part when on
 	cooldowns = false, sweep = true, timers = true, glow = true, grey = true,
@@ -423,6 +425,7 @@ local function Make()
 	P.burst = Tex("OVERLAY", GLOW, "ADD");
 	P.handle = Tex("OVERLAY", SOLID);
 	P.levelBg = Tex("BORDER", SOLID);
+	P.levelLine = Tex("ARTWORK", SOLID);
 	P.text = f:CreateFontString(nil, "OVERLAY");
 	P.shieldTextFs = f:CreateFontString(nil, "OVERLAY");
 	P.hint = f:CreateFontString(nil, "OVERLAY");
@@ -738,13 +741,36 @@ local function Marker(s, W, y, h, now, a)
 	end
 end
 
--- Your level in the run (the game's run line, else the client's): a number in a small dark box left
--- of the bar, inside it at its left, or over it.
-local function Level(s, W, H, y0, a)
+-- Your level in the run (the game's run line, else the client's), nil with none.
+local function LevelNow()
 	local lv = ( B.test and GetTime() < B.test ) and 12 or ( tonumber(AZS_RUN and AZS_RUN.lvl)
 		or ( UnitLevel and UnitLevel("player") ) );
-	if ( not s.level or not lv or lv <= 0 ) then
+	return lv and lv > 0 and lv or nil;
+end
+
+-- Your level as a part at the bar's left end ("left"): its text set, and how wide the part is (0:
+-- none). Drawn as part of the bar: its background, a line between, the border round both (the
+-- user's players, 2026-11-26: a box apart with a gap was "gross").
+local function LevelPart(s, H)
+	local lv = s.level and s.levelPos == "left" and LevelNow();
+	if ( not lv ) then
+		return 0;
+	end
+	local fs = P.levelFs;
+	Font(fs, s.levelSize);
+	fs:SetText(tostring(lv));
+	local tw = ( fs.GetStringWidth and fs:GetStringWidth() ) or s.levelSize * 0.6 * string.len(tostring(lv));
+	-- just the number with a little room round it (players: "thinner width wise, basically just
+	-- housing the number")
+	return math.floor(math.max(tw + 6, s.levelSize * 0.8) + 0.5);
+end
+
+-- Your level: the part at the bar's left end (lw px wide), inside it at its left, or over it.
+local function Level(s, W, H, y0, a, lw)
+	local lv = LevelNow();
+	if ( not s.level or not lv ) then
 		Off(P.levelBg);
+		Off(P.levelLine);
 		P.levelFs:Hide();
 		return;
 	end
@@ -756,14 +782,15 @@ local function Level(s, W, H, y0, a)
 	if ( s.levelPos == "inside" ) then
 		fs:SetPoint("LEFT", f, "BOTTOMLEFT", 4, y0 + H / 2);
 		Off(P.levelBg);
+		Off(P.levelLine);
 	elseif ( s.levelPos == "above" ) then
 		fs:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 0, 2);
 		Off(P.levelBg);
+		Off(P.levelLine);
 	else
-		local tw = ( fs.GetStringWidth and fs:GetStringWidth() ) or s.levelSize * 1.2;
-		local bw, bh = math.max(tw + 8, s.levelSize + 6), math.max(H + y0, s.levelSize + 4);
-		Put(P.levelBg, -bw - 2, (H + y0 - bh) / 2, bw, bh, 0, 0, 0, a * math.max(0.6, s.bgAlpha));
-		fs:SetPoint("CENTER", f, "BOTTOMLEFT", -bw / 2 - 2, (H + y0) / 2);
+		Put(P.levelBg, -lw, 0, lw, H + y0, 0, 0, 0, a * math.max(s.bgAlpha, 0.35));
+		Put(P.levelLine, -1, 0, 1, H + y0, 0.02, 0.02, 0.03, a * 0.9);
+		fs:SetPoint("CENTER", f, "BOTTOMLEFT", -lw / 2, (H + y0) / 2);
 	end
 	fs:Show();
 end
@@ -834,6 +861,8 @@ function B.Paint(now, dt)
 		P.power:SetTexture(tex);
 		P.fill.path, P.fill.l, P.power.l = tex, nil, nil;
 	end
+	-- your level as a part at its left end (lw px), inside its border
+	local lw = LevelPart(s, H + y0);
 	-- the frame round it
 	Put(P.bg, 0, 0, W, H + y0, 0, 0, 0, a * s.bgAlpha);
 	if ( s.border ) then
@@ -842,9 +871,9 @@ function B.Paint(now, dt)
 		local pulse = low and ( 0.5 + 0.5 * math.sin(now * 7) ) or 0;
 		local er, eg, eb, ea = 0.02 + 0.85 * pulse, 0.02 + 0.08 * pulse, 0.03, a * (0.9 + 0.1 * pulse);
 		local th = 1 + pulse;
-		Put(P.edgeB, -th, -th, W + 2 * th, th, er, eg, eb, ea);
-		Put(P.edgeT, -th, H + y0, W + 2 * th, th, er, eg, eb, ea);
-		Put(P.edgeL, -th, 0, th, H + y0, er, eg, eb, ea);
+		Put(P.edgeB, -lw - th, -th, W + lw + 2 * th, th, er, eg, eb, ea);
+		Put(P.edgeT, -lw - th, H + y0, W + lw + 2 * th, th, er, eg, eb, ea);
+		Put(P.edgeL, -lw - th, 0, th, H + y0, er, eg, eb, ea);
 		Put(P.edgeR, W, 0, th, H + y0, er, eg, eb, ea);
 	else
 		Off(P.edgeB);
@@ -954,10 +983,10 @@ function B.Paint(now, dt)
 	else
 		P.shieldTextFs:Hide();
 	end
-	Level(s, W, H, y0, a);
+	Level(s, W, H, y0, a, lw);
 	-- unlocked: a handle and a hint, and it takes the mouse
 	if ( not s.locked ) then
-		Put(P.handle, -3, -3, W + 6, H + y0 + 6, 0.75, 0.55, 1, 0.25 + 0.1 * math.sin(now * 4));
+		Put(P.handle, -3 - lw, -3, W + lw + 6, H + y0 + 6, 0.75, 0.55, 1, 0.25 + 0.1 * math.sin(now * 4));
 		Font(P.hint, 10);
 		P.hint:ClearAllPoints();
 		P.hint:SetPoint("BOTTOM", f, "TOP", 0, s.textPos == "above" and 16 or 4);
@@ -1280,6 +1309,27 @@ function B.Icons(now)
 	local _, _, class = AST.State();
 	if ( class and not ( B.test and GetTime() < B.test ) ) then
 		Choose(groups, class);
+	end
+	-- skills only while on cooldown (the user, 2026-11-26): each from its cast until it's back, and the
+	-- glow's moment longer when it glows as it's ready
+	if ( s.skillsCooling and groups.skills ) then
+		local keep, linger = {}, ( s.cooldowns and s.glow ) and 0.7 or 0;
+		B.cooled = B.cooled or {};
+		for i = 1, table.getn(groups.skills) do
+			local d = groups.skills[i];
+			if ( d.left and d.left > 0.05 and d.max and d.max > 0 ) then
+				B.cooled[d.key] = true;
+				table.insert(keep, d);
+			else
+				if ( B.cooled[d.key] == true ) then
+					B.cooled[d.key] = now;
+				end
+				if ( type(B.cooled[d.key]) == "number" and now - B.cooled[d.key] < linger ) then
+					table.insert(keep, d);
+				end
+			end
+		end
+		groups.skills = keep;
 	end
 	local rows = {};
 	local order = { "skills", "jewelry", "buffs" };

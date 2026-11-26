@@ -38,8 +38,18 @@ local DEF = {
 	execAt = 0, execRGB = { 1, 0.82, 0.2 },
 	text = "percent", textSize = 11, textPos = "center",
 	name = true, namePos = "above", nameSize = 11, nameColor = "kind", kindTag = true, tot = false,
+	-- its kind's word: "row" (on a second row, beyond the name's, at its left) or "name" (after the
+	-- name, the first to go when the line is too long); whom it's after: "name" (on the name's row, at
+	-- its right), "row" (on the second row, at its right) or "auto" (the name's row, moving up when the
+	-- name doesn't fit beside it). A name too long for its row is shortened ("...").
+	kindAt = "row", totAt = "name",
+	-- whom it's after (the user, 2026-11-26: not ">"): marked by "sword" (the game's attack cursor),
+	-- "arrow" (a small one), "word" ("Target: name") or "none"; a teammate in their class's colour; you
+	-- as "You" in totYouRGB
+	totMark = "sword", totClass = true, totYou = true, totYouRGB = { 1, 0.32, 0.25 },
 	power = false, powerHeight = 4,
-	-- its level: "name" (before its name), "left" (a small box left of the bar) or "inside"
+	-- its level: "name" (before its name), "after" (after it), "left" (a part at the bar's left end,
+	-- inside its border) or "inside"
 	level = false, levelPos = "name", levelSize = 11, levelRGB = { 1, 0.82, 0.2 },
 	debuffs = true, debuffsMax = 16, debuffSize = 20, debuffSide = "above", debuffAlign = "left",
 	buffs = true, buffsMax = 8, buffSize = 18, buffSide = "below", buffAlign = "left",
@@ -112,7 +122,7 @@ function T.Reset()
 		db.tbar = nil;
 		T.S();
 	end
-	T.hp, T.trail, T.who = nil, nil, nil;
+	T.hp, T.trail, T.who, T.names = nil, nil, nil, nil;
 end
 
 ---------------------------------------------------------------------------------------------
@@ -257,15 +267,22 @@ local function Make()
 	P.mark = Tex("OVERLAY", SOLID);
 	P.handle = Tex("OVERLAY", SOLID);
 	P.levelBg = Tex("BORDER", SOLID);
+	P.levelLine = Tex("ARTWORK", SOLID);
+	P.totIcon = Tex("OVERLAY", "Interface\\Cursor\\Attack");
 	P.levelFs = f:CreateFontString(nil, "OVERLAY");
 	Font(P.levelFs, 11);
 	P.text = f:CreateFontString(nil, "OVERLAY");
 	P.name = f:CreateFontString(nil, "OVERLAY");
 	P.tot = f:CreateFontString(nil, "OVERLAY");
+	P.kind = f:CreateFontString(nil, "OVERLAY");
 	P.hint = f:CreateFontString(nil, "OVERLAY");
+	-- never shown: measures texts, so what's on screen isn't touched
+	P.meas = f:CreateFontString(nil, "OVERLAY");
+	P.meas:Hide();
 	Font(P.text, 11);
 	Font(P.name, 11);
 	Font(P.tot, 10);
+	Font(P.kind, 10);
 	Font(P.hint, 10);
 	if ( P.name.SetJustifyH ) then
 		P.name:SetJustifyH("LEFT");
@@ -310,6 +327,7 @@ local function Demo(t)
 	local d = { name = AST_L("Test enemy"), hp = math.max(0.02, hp) * 12000, mx = 12000, exact = true, kind = "guardian",
 		pw = 60 + 30 * math.sin(t), pmx = 100, ptype = 0, demo = true, level = 14 };
 	d.tot = UnitName and UnitName("player") or nil;
+	d.totYou = true;
 	local deb = {
 		{ tex = "Interface\\Icons\\Spell_Shadow_ShadowWordPain", stacks = 3, left = 18 - t, max = 18, type = "Magic" },
 		{ tex = "Interface\\Icons\\Spell_Shadow_CurseOfTounges", stacks = 1, type = "Curse" },
@@ -338,7 +356,62 @@ function T.Test()
 	T.hp, T.trail, T.who = nil, nil, nil;
 end
 
--- Your target now: { name, hp, mx, exact, kind, id, dead, pw, pmx, ptype, tot }, nil with none.
+-- A guardian or boss by its name in the game's list of them (AZS_UNITS): its kind, and its id when only
+-- one has that name. Asked before the game's target line has come for a new target (a moment after you
+-- target it): the client alone calls a guardian "elite" (the user, 2026-11-26: "a breif moment when
+-- selecting a guardian ect where its bar is orange and elite is visible").
+local function Listed(name)
+	local list = AZS_UNITS;
+	if ( type(list) ~= "table" or not name ) then
+		return nil;
+	end
+	local kind, id, n = nil, nil, 0;
+	for i = 1, table.getn(list) do
+		local u = list[i];
+		if ( u.name == name and ( u.kind == "guardian" or u.kind == "boss" or u.kind == "final" or u.kind == "finalBoss" ) ) then
+			kind, id, n = u.kind, u.id, n + 1;
+		end
+	end
+	return kind, ( n == 1 ) and id or nil;
+end
+
+-- A hero's class key ("WARRIOR"...) by name: from the game's party line (its `class` the class's key;
+-- this client's UnitClass has named the wrong class), else, for you, the run's class number.
+local CLASS_IDS = { [1] = "WARRIOR", [2] = "PALADIN", [3] = "HUNTER", [4] = "ROGUE", [5] = "PRIEST", [7] = "SHAMAN",
+	[8] = "MAGE", [9] = "WARLOCK", [11] = "DRUID" };
+-- the classes' colours (the shaman in its later blue, as Survivor UI has it)
+local CLASS_RGB = { WARRIOR = { 0.78, 0.61, 0.43 }, PALADIN = { 0.96, 0.55, 0.73 }, HUNTER = { 0.67, 0.83, 0.45 },
+	ROGUE = { 1, 0.96, 0.41 }, PRIEST = { 1, 1, 1 }, SHAMAN = { 0, 0.44, 0.87 }, MAGE = { 0.41, 0.8, 0.94 },
+	WARLOCK = { 0.58, 0.51, 0.79 }, DRUID = { 1, 0.49, 0.04 } };
+-- whom it's after: its marks (the game's attack cursor, the chat frame's small arrow), its plain colour
+local TOT_MARKS = { sword = "Interface\\Cursor\\Attack", arrow = "Interface\\ChatFrame\\ChatFrameExpandArrow" };
+local TOT_RGB = { 0.85, 0.85, 0.9 };
+local function ClassOf(name, you)
+	local function Key(c)
+		if ( tonumber(c) ) then
+			return CLASS_IDS[tonumber(c)];
+		elseif ( type(c) == "string" and c ~= "" ) then
+			-- (A-Z by hand: string.upper rewrites UTF-8 bytes under a code page)
+			return ( string.gsub(c, "[a-z]", function(ch) return string.char(string.byte(ch) - 32); end) );
+		end
+		return nil;
+	end
+	local list = AZS_PARTY;
+	if ( type(list) == "table" and name ) then
+		for i = 1, table.getn(list) do
+			if ( list[i].name == name ) then
+				return Key(list[i].class);
+			end
+		end
+	end
+	if ( you and type(AZS_ZONE) == "table" ) then
+		return Key(AZS_ZONE.class);
+	end
+	return nil;
+end
+
+-- Your target now: { name, hp, mx, exact, kind, id, dead, pw, pmx, ptype, tot, totYou, totClass }, nil
+-- with none.
 function T.Read()
 	if ( T.Testing() ) then
 		return Demo(8 - (T.test - GetTime()));
@@ -363,7 +436,12 @@ function T.Read()
 	elseif ( own ) then
 		d.kind, d.id = Kind(tg.kind, tg.elite), tg.id;
 	else
-		d.kind = Kind(AZS_UnitKind and AZS_UnitKind("target"));
+		local kind, id = Listed(d.name);
+		if ( kind ) then
+			d.kind, d.id = Kind(kind), id;
+		else
+			d.kind = Kind(AZS_UnitKind and AZS_UnitKind("target"));
+		end
 	end
 	d.dead = ( UnitIsDead and UnitIsDead("target") ) and true or false;
 	d.level = UnitLevel and UnitLevel("target");
@@ -372,6 +450,8 @@ function T.Read()
 	d.ptype = UnitPowerType and UnitPowerType("target") or 0;
 	if ( UnitExists("targettarget") and UnitName ) then
 		d.tot = UnitName("targettarget");
+		d.totYou = ( UnitIsUnit and UnitIsUnit("targettarget", "player") ) or d.tot == UnitName("player");
+		d.totClass = ClassOf(d.tot, d.totYou);
 	end
 	return d;
 end
@@ -515,32 +595,124 @@ local function LevelText(d)
 	return nil;
 end
 
--- Its name line: its level first (if it goes with the name), the name (in its kind's colour, or
--- white), its kind's word after it.
-local function NameText(s, d)
-	local c = s.nameColor == "kind" and KindColor(s, d.kind) or WHITE;
-	local text = Hex(c, 0.35) .. ( d.name or "" ) .. "|r";
-	local lv = s.level and s.levelPos == "name" and LevelText(d);
-	if ( lv ) then
-		text = Hex(s.levelRGB) .. lv .. "|r  " .. text;
+-- s less its last character (UTF-8: a character's other bytes are 0x80-0xBF), for names in any
+-- language.
+local function DropLast(str)
+	local n = string.len(str);
+	while ( n > 0 ) do
+		local byte = string.byte(str, n);
+		n = n - 1;
+		if ( byte < 128 or byte >= 192 ) then
+			break;
+		end
 	end
-	local word = KindWord(d.kind);
-	if ( s.kindTag and word ) then
-		text = text .. "  " .. Hex(KindColor(s, d.kind), 0.1) .. word .. "|r";
-	end
-	return text;
+	return string.sub(str, 1, n);
 end
 
--- Its level by the bar: a number in a small dark box left of it, or inside it at its left (with the
--- name: on the name's line, NameText). With its name off, "with the name" is the box.
-local function Level(s, d, W, H, y0, a)
-	local lv = s.level and LevelText(d);
+-- Where its level goes now: "name" (before its name), "after" (after it), "row" (at the left of the
+-- row beyond the name's, before its kind's word: the user, 2026-11-26, "level should also be able to
+-- go uptop with guardian"), "left" (a part at the bar's left end) or "inside". With its name off, the
+-- name's places are the part at the bar's end; with the name inside the bar, there's no row: before it.
+local function LevelAt(s)
 	local at = s.levelPos;
-	if ( at == "name" and not s.name ) then
-		at = "left";
+	if ( ( at == "name" or at == "after" or at == "row" ) and not s.name ) then
+		return "left";
+	elseif ( at == "row" and s.namePos == "inside" ) then
+		return "name";
 	end
-	if ( not lv or at == "name" ) then
+	return at;
+end
+
+-- How wide a text is at a size (0 where the client can't say).
+local function Wide(text, size)
+	local m = P.meas;
+	Font(m, size);
+	m:SetText(text);
+	return ( m.GetStringWidth and m:GetStringWidth() ) or 0;
+end
+
+-- Its name line, all on one line within `room` px (the user's players, 2026-11-26: a long name went
+-- onto a second line, its level left on the first): its level before or after the name if it goes
+-- with it (a space between: "a little smaller"), the name (in its kind's colour, or white), and with
+-- `withWord` its kind's word. Too long: the kind's word goes first, then the name loses letters from
+-- its end ("..."). Gives the text and whether it all fitted as it was. Kept for each set of parts.
+local function NameLine(s, d, room, withWord)
+	local hc = Hex(s.nameColor == "kind" and KindColor(s, d.kind) or WHITE, 0.35);
+	local at = LevelAt(s);
+	local lv = s.level and ( at == "name" or at == "after" ) and LevelText(d);
+	local lc = Hex(s.levelRGB);
+	local word = withWord and s.kindTag and KindWord(d.kind);
+	local wc = Hex(KindColor(s, d.kind), 0.1);
+	local key = table.concat({ d.name or "", tostring(lv), at, tostring(word), hc, lc, wc, tostring(room), s.nameSize }, "|");
+	local kept = T.names and T.names[key];
+	if ( kept ) then
+		return kept[1], kept[2];
+	end
+	local function Build(name, withIt)
+		local text = hc .. name .. "|r";
+		if ( lv and at == "after" ) then
+			text = text .. " " .. lc .. lv .. "|r";
+		elseif ( lv ) then
+			text = lc .. lv .. "|r " .. text;
+		end
+		if ( withIt and word ) then
+			text = text .. "  " .. wc .. word .. "|r";
+		end
+		return text;
+	end
+	local function Fits(text)
+		return Wide(text, s.nameSize) <= room;
+	end
+	-- (no width of its own: it never wraps)
+	if ( P.name.SetWidth ) then
+		P.name:SetWidth(0);
+	end
+	local name = d.name or "";
+	local text, whole = Build(name, true), true;
+	if ( not Fits(text) ) then
+		whole = false;
+		text = Build(name, false);
+		local cut = name;
+		while ( not Fits(text) and string.len(cut) > 0 ) do
+			cut = DropLast(cut);
+			-- (no space before the dots; a plain space, not %s: game text under a code page)
+			local shown = string.gsub(cut, " +$", "");
+			text = Build(shown .. "...", false);
+		end
+	end
+	if ( not T.names or T.nameCount > 40 ) then
+		T.names, T.nameCount = {}, 0;
+	end
+	T.names[key] = { text, whole };
+	T.nameCount = T.nameCount + 1;
+	return text, whole;
+end
+
+-- Its level as a part at the bar's left end (LevelAt "left"): its text set, and how wide the part is
+-- (0: none). Drawn as part of the bar: its background, a line between, the border round both (the
+-- user's players: a box apart with a gap was "gross").
+local function LevelPart(s, d, H)
+	local lv = s.level and LevelAt(s) == "left" and LevelText(d);
+	if ( not lv ) then
+		return 0;
+	end
+	local fs = P.levelFs;
+	Font(fs, s.levelSize);
+	Say(fs, lv);
+	local tw = ( fs.GetStringWidth and fs:GetStringWidth() ) or s.levelSize * 0.6 * string.len(lv);
+	-- just the number with a little room round it (players: "thinner width wise, basically just
+	-- housing the number")
+	return math.floor(math.max(tw + 6, s.levelSize * 0.8) + 0.5);
+end
+
+-- Its level by the bar: the part at its left end (lw px wide), inside it at its left, or at the left of
+-- the row beyond its name's.
+local function Level(s, d, W, H, y0, a, lw)
+	local at = LevelAt(s);
+	local lv = s.level and LevelText(d);
+	if ( not lv or ( at ~= "left" and at ~= "inside" and at ~= "row" ) ) then
 		Off(P.levelBg);
+		Off(P.levelLine);
 		P.levelFs:Hide();
 		return;
 	end
@@ -552,11 +724,19 @@ local function Level(s, d, W, H, y0, a)
 	if ( at == "inside" ) then
 		fs:SetPoint("LEFT", f, "BOTTOMLEFT", 4, y0 + H / 2);
 		Off(P.levelBg);
+		Off(P.levelLine);
+	elseif ( at == "row" ) then
+		if ( s.namePos == "below" ) then
+			fs:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 0, -( s.nameSize + 4 ));
+		else
+			fs:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 0, s.nameSize + 4);
+		end
+		Off(P.levelBg);
+		Off(P.levelLine);
 	else
-		local tw = ( fs.GetStringWidth and fs:GetStringWidth() ) or s.levelSize * 1.2;
-		local bw, bh = math.max(tw + 8, s.levelSize + 6), math.max(H + y0, s.levelSize + 4);
-		Put(P.levelBg, -bw - 2, (H + y0 - bh) / 2, bw, bh, 0, 0, 0, a * math.max(0.6, s.bgAlpha));
-		fs:SetPoint("CENTER", f, "BOTTOMLEFT", -bw / 2 - 2, (H + y0) / 2);
+		Put(P.levelBg, -lw, 0, lw, H + y0, 0, 0, 0, a * math.max(s.bgAlpha, 0.35));
+		Put(P.levelLine, -1, 0, 1, H + y0, 0.02, 0.02, 0.03, a * 0.9);
+		fs:SetPoint("CENTER", f, "BOTTOMLEFT", -lw / 2, (H + y0) / 2);
 	end
 	fs:Show();
 end
@@ -596,6 +776,8 @@ function T.Paint(d, now, dt)
 	end
 	local exec = s.execAt > 0 and not d.dead and frac < s.execAt / 100;
 	local pulse = exec and ( 0.5 + 0.5 * math.sin(now * 6) ) or 0;
+	-- its level as a part at its left end (lw px), inside its border
+	local lw = LevelPart(s, d, H + y0);
 	-- the frame round it
 	Put(P.bg, 0, 0, W, H + y0, 0, 0, 0, a * s.bgAlpha);
 	if ( s.border ) then
@@ -606,9 +788,9 @@ function T.Paint(d, now, dt)
 			er, eg, eb = ec[1] * (0.6 + 0.4 * pulse), ec[2] * (0.6 + 0.4 * pulse), ec[3] * (0.6 + 0.4 * pulse);
 		end
 		local th = exec and 2 or 1;
-		Put(P.edgeB, -th, -th, W + 2 * th, th, er, eg, eb, a);
-		Put(P.edgeT, -th, H + y0, W + 2 * th, th, er, eg, eb, a);
-		Put(P.edgeL, -th, 0, th, H + y0, er, eg, eb, a);
+		Put(P.edgeB, -lw - th, -th, W + lw + 2 * th, th, er, eg, eb, a);
+		Put(P.edgeT, -lw - th, H + y0, W + lw + 2 * th, th, er, eg, eb, a);
+		Put(P.edgeL, -lw - th, 0, th, H + y0, er, eg, eb, a);
 		Put(P.edgeR, W, 0, th, H + y0, er, eg, eb, a);
 	else
 		Off(P.edgeB);
@@ -692,30 +874,75 @@ function T.Paint(d, now, dt)
 	else
 		P.text:Hide();
 	end
-	-- its name (above, inside or under it), and whom it's after on the same line
+	-- its name (above, inside or under it), its kind's word and whom it's after (the user's players,
+	-- 2026-11-26: "have the guardian/elite/boss setting put on that 2nd row above the mobs name on the
+	-- far left", "if the name is long, the ToT is the one that moves to the 2nd line up"; the user, the
+	-- same day: "guardian didnt go on top", "level should also be able to go uptop with guardian", "the
+	-- target should also remain on the bttom row"). The name keeps the row next to the bar. A second row
+	-- beyond it holds its level (levelPos "row") and its kind's word (kindAt "row") at its left, and
+	-- whom it's after at its right when totAt is "row", or "auto" and the name doesn't fit beside it.
 	T.top, T.bottom = 0, 0;
 	local line = math.max(s.name and s.nameSize or 0, s.tot and 10 or 0) + 4;
 	local nameAt = s.namePos;
+	local below = s.name and nameAt == "below";
+	-- whom it's after: its name (you: "You" in the warning colour; a teammate in their class's colour),
+	-- marked by a sword or an arrow before it, or "Target: name"
+	local tot, you = nil, s.totYou and d.totYou;
+	if ( s.tot and d.tot ) then
+		local c = you and s.totYouRGB or ( s.totClass and CLASS_RGB[d.totClass or ""] ) or TOT_RGB;
+		tot = Hex(c) .. ( you and AST_L("You") or d.tot ) .. "|r";
+		if ( s.totMark == "word" ) then
+			-- ("Targeting", not "Target": the languages' build matches texts to the game's names by their
+			-- letters, and "Target: %s" would read as its "Targets")
+			tot = string.format(AST_L("Targeting: %s"), tot);
+		end
+	end
+	local icon = tot and TOT_MARKS[s.totMark];
+	local totW, totTW = 0, 0;
+	if ( tot ) then
+		Font(P.tot, 10);
+		Say(P.tot, tot);
+		if ( T.totSaid ~= tot ) then
+			T.totSaid, T.totTW = tot, Wide(tot, 10);
+		end
+		totTW = T.totTW;
+		totW = totTW + 10 + ( icon and 16 or 0 );
+	end
+	local word = s.name and s.kindTag and KindWord(d.kind);
+	local wordUp, totUp = false, false;
+	-- its level on that row, before its kind's word: how far in the word starts
+	local levelUp = s.level and LevelAt(s) == "row" and LevelText(d);
+	local wordX = levelUp and Wide(levelUp, s.levelSize) + 4 or 0;
 	if ( s.name ) then
 		Font(P.name, s.nameSize);
-		Say(P.name, NameText(s, d));
+		-- the room on its line: inside the bar, beside the numbers; else the bar's width (from the level's
+		-- part at its end), less whom it's after while that's on the same line
+		local full = math.max(20, W + lw);
+		local shown, whole;
+		if ( nameAt == "inside" ) then
+			shown = NameLine(s, d, math.max(20, W * ( text ~= "" and s.textPos ~= "left" and 0.6 or 0.95 ) - 4), true);
+		else
+			wordUp = ( word and s.kindAt ~= "name" ) and true or false;
+			totUp = ( tot and s.totAt == "row" ) and true or false;
+			shown, whole = NameLine(s, d, math.max(20, full - ( totUp and 0 or totW )), not wordUp);
+			if ( not whole and tot and s.totAt == "auto" ) then
+				totUp = true;
+				shown = NameLine(s, d, full, not wordUp);
+			end
+			-- (no room for both on that row: whom it's after wins)
+			if ( wordUp and totUp and wordX + Wide(word, 10) + totW > full ) then
+				wordUp = false;
+			end
+		end
+		Say(P.name, shown);
 		P.name:ClearAllPoints();
 		if ( nameAt == "inside" ) then
 			P.name:SetPoint("LEFT", f, "BOTTOMLEFT", 4, y0 + H / 2);
-			if ( P.name.SetWidth ) then
-				P.name:SetWidth(math.max(20, W * ( text ~= "" and s.textPos ~= "left" and 0.62 or 0.95 )));
-			end
-		elseif ( nameAt == "below" ) then
-			P.name:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 0, -2);
-			if ( P.name.SetWidth ) then
-				P.name:SetWidth(W * ( s.tot and d.tot and 0.62 or 1 ));
-			end
+		elseif ( below ) then
+			P.name:SetPoint("TOPLEFT", f, "BOTTOMLEFT", -lw, -2);
 			T.bottom = line;
 		else
-			P.name:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 0, 2);
-			if ( P.name.SetWidth ) then
-				P.name:SetWidth(W * ( s.tot and d.tot and 0.62 or 1 ));
-			end
+			P.name:SetPoint("BOTTOMLEFT", f, "TOPLEFT", -lw, 2);
 			T.top = line;
 		end
 		if ( P.name.SetAlpha ) then
@@ -725,26 +952,68 @@ function T.Paint(d, now, dt)
 	else
 		P.name:Hide();
 	end
-	if ( s.tot and d.tot ) then
-		Font(P.tot, 10);
-		Say(P.tot, "> " .. d.tot);
-		P.tot:SetTextColor(0.85, 0.85, 0.9, a);
-		P.tot:ClearAllPoints();
-		if ( s.name and nameAt == "below" ) then
-			P.tot:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, -2);
-			T.bottom = line;
+	-- the row beyond the name's: where it starts, and how far everything reaches with it
+	local y2 = s.nameSize + 4;
+	if ( wordUp or totUp or levelUp ) then
+		if ( below ) then
+			T.bottom = y2 + 13;
 		else
-			P.tot:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, 2);
-			T.top = line;
+			T.top = y2 + 13;
+		end
+	end
+	if ( wordUp ) then
+		local c = KindColor(s, d.kind);
+		Font(P.kind, 10);
+		Say(P.kind, word);
+		P.kind:SetTextColor(c[1] + (1 - c[1]) * 0.1, c[2] + (1 - c[2]) * 0.1, c[3] + (1 - c[3]) * 0.1, a);
+		P.kind:ClearAllPoints();
+		if ( below ) then
+			P.kind:SetPoint("TOPLEFT", f, "BOTTOMLEFT", -lw + wordX, -y2);
+		else
+			P.kind:SetPoint("BOTTOMLEFT", f, "TOPLEFT", -lw + wordX, y2);
+		end
+		P.kind:Show();
+	else
+		P.kind:Hide();
+	end
+	if ( tot ) then
+		local y = totUp and y2 or 2;
+		-- after you: a soft beat
+		local beat = you and ( 0.8 + 0.2 * math.sin(now * 5) ) or 1;
+		P.tot:SetTextColor(TOT_RGB[1], TOT_RGB[2], TOT_RGB[3], a * beat);
+		P.tot:ClearAllPoints();
+		if ( below ) then
+			P.tot:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, -y);
+			T.bottom = math.max(T.bottom, line);
+		else
+			P.tot:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, y);
+			T.top = math.max(T.top, line);
 		end
 		P.tot:Show();
+		-- its mark, just before it, as tall as the text (the sword is the attack cursor, its tip to the
+		-- upper left: mirrored, so it points at the name)
+		if ( icon ) then
+			if ( P.totIcon.path ~= icon ) then
+				P.totIcon:SetTexture(icon);
+				P.totIcon.path = icon;
+			end
+			if ( s.totMark == "sword" ) then
+				Coords(P.totIcon, 1, 0, 0, 1);
+			else
+				Coords(P.totIcon, 0, 1, 0, 1);
+			end
+			Put(P.totIcon, W - totTW - 16, below and ( -y - 12 ) or ( H + y0 + y - 1 ), 12, 12, 1, 1, 1, a * beat);
+		else
+			Off(P.totIcon);
+		end
 	else
 		P.tot:Hide();
+		Off(P.totIcon);
 	end
-	Level(s, d, W, H, y0, a);
+	Level(s, d, W, H, y0, a, lw);
 	-- unlocked: a handle and a hint, and it takes the mouse
 	if ( not s.locked ) then
-		Put(P.handle, -3, -3, W + 6, H + y0 + 6, 0.75, 0.55, 1, 0.25 + 0.1 * math.sin(now * 4));
+		Put(P.handle, -3 - lw, -3, W + lw + 6, H + y0 + 6, 0.75, 0.55, 1, 0.25 + 0.1 * math.sin(now * 4));
 		Font(P.hint, 10);
 		P.hint:ClearAllPoints();
 		P.hint:SetPoint("BOTTOM", f, "TOP", 0, T.top + 2);
