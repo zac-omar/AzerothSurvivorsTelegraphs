@@ -2192,6 +2192,8 @@ local function BuildHero()
 	local function HasBuild() return type(AZS_SetHudShown) == "function" and type(AZS_IsHudShown) == "function"; end
 	Check(h, "Hide your skill icons", HasBuild, function() return HasBuild() and not AZS_IsHudShown("build"); end,
 		function(v)
+			-- (kept as ours too, put on again each session: SurvivorUI turns the game's back on as it closes)
+			S().hideBuild = v or nil;
 			if ( HasBuild() ) then
 				AZS_SetHudShown("build", not v);
 			end
@@ -2659,8 +2661,27 @@ function AST.OnTop(name, on)
 	end
 end
 
--- While the window is open, the tooltip and the colour picker it uses are kept over them too.
+-- While the window is open, the tooltip and the colour picker it uses are kept over them too. The
+-- game keeps one flag a name, shared by every addon (SurvivorUI keeps the tooltip over the cards for
+-- its own pieces): only one the window raised itself is put back under as it closes.
+AST.raised = {};
 function AST.OptionsShown(shown)
-	AST.OnTop("GameTooltip", shown);
-	AST.OnTop("ColorPickerFrame", shown);
+	local names = { "GameTooltip", "ColorPickerFrame" };
+	for i = 1, 2 do
+		local name = names[i];
+		if ( shown ) then
+			local up = false;
+			if ( type(AZS_IsOnTopOfScreens) == "function" ) then
+				local ok, on = pcall(AZS_IsOnTopOfScreens, name);
+				up = ok and on and true or false;
+			end
+			if ( not AST.raised[name] and not up ) then
+				AST.OnTop(name, true);
+				AST.raised[name] = true;
+			end
+		elseif ( AST.raised[name] ) then
+			AST.raised[name] = nil;
+			AST.OnTop(name, false);
+		end
+	end
 end

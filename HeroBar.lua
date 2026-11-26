@@ -159,71 +159,35 @@ end
 local attic = CreateFrame("Frame", "ASTAttic", UIParent);
 attic:Hide();
 
--- Frames that ride along with one of those: any shown frame (not ours, not inside the frame itself,
--- not a party member's) sitting just under it and overlapping it across. The icons the game puts
--- under your portrait come from no UI file, so they're found by where they are, at most 120 units
--- below it.
-local function Ours(fr)
-	local k = 0;
-	while ( fr and k < 20 ) do
-		local name = fr.GetName and fr:GetName();
-		if ( name and ( string.find(name, "^AST") or string.find(name, "^PartyMember") ) ) then
-			return true;
-		end
-		fr = fr.GetParent and fr:GetParent();
-		k = k + 1;
-	end
-	return false;
-end
-
-local function Inside(fr, base)
-	local k = 0;
-	fr = fr.GetParent and fr:GetParent();
-	while ( fr and k < 20 ) do
-		if ( fr == base ) then
-			return true;
-		end
-		fr = fr.GetParent and fr:GetParent();
-		k = k + 1;
-	end
-	return false;
-end
-
-local function Under(base)
-	local list = {};
-	if ( not ( EnumerateFrames and base and base.GetLeft ) ) then
-		return list;
-	end
-	local l, r, b = base:GetLeft(), base:GetRight(), base:GetBottom();
-	if ( not ( l and r and b ) ) then
-		return list;
-	end
-	local fr, guard = EnumerateFrames(), 0;
-	while ( fr and guard < 6000 ) do
-		guard = guard + 1;
-		if ( fr ~= base and fr ~= attic and fr ~= UIParent and fr ~= WorldFrame and not B.parked[fr]
-			and fr.IsVisible and fr:IsVisible() and not Ours(fr) and not Inside(fr, base) ) then
-			local fl, fr2, ft, fb = fr:GetLeft(), fr:GetRight(), fr:GetTop(), fr:GetBottom();
-			if ( fl and fr2 and ft and fb and fr2 - fl < 400 and ft - fb < 160
-				and fr2 > l and fl < r + 40 and ft <= b + 12 and ft >= b - 120 ) then
-				table.insert(list, fr);
-			end
-		end
-		fr = EnumerateFrames(fr);
-	end
-	return list;
-end
-
 -- Shown again on the way back only when it would be: the enemy frames with something targeted.
 local SHOWN_IF = { TargetFrame = "target", TargetofTargetFrame = "targettarget" };
 local UPDATE = { PlayerFrame = "PlayerFrame_Update", TargetFrame = "TargetFrame_Update", ComboFrame = "ComboFrame_Update",
 	TargetofTargetFrame = "TargetofTarget_Update" };
 
+-- A game frame another addon has taken over: SurvivorUI's own unit frames (shown: the game's player
+-- and target frames switched off by it), or an enemy frame hidden with a target there. Put back as
+-- it was, it isn't shown or updated (that would bring the game's back beside the addon's).
+local OWNED = { PlayerFrame = true, TargetFrame = true, TargetofTargetFrame = true };
+local function SurvivorUIOwns(name)
+	local own = getglobal("SurvivorUIPlayer");
+	return OWNED[name] ~= nil and own ~= nil and own.IsShown ~= nil and own:IsShown() and true or false;
+end
+
+local function Foreign(fr, name)
+	if ( name and SurvivorUIOwns(name) ) then
+		return true;
+	end
+	local unit = name and SHOWN_IF[name];
+	return unit ~= nil and UnitExists ~= nil and UnitExists(unit) and not fr:IsShown();
+end
+
 local function ParkOne(fr, name)
 	if ( B.parked[fr] ) then
 		return;
 	end
-	B.parked[fr] = { parent = fr:GetParent() or UIParent, shown = fr:IsShown(), name = name };
+	-- (its own Show kept, to put back: a UI addon may have set one, e.g. to keep it hidden)
+	B.parked[fr] = { parent = fr:GetParent() or UIParent, shown = fr:IsShown(), name = name, show = rawget(fr, "Show"),
+		foreign = Foreign(fr, name) and true or nil };
 	fr:SetParent(attic);
 	fr:Hide();
 	-- nothing of its own shows it again while it's put away
@@ -236,8 +200,12 @@ local function Unpark(fr)
 		return;
 	end
 	B.parked[fr] = nil;
-	fr.Show = nil;
+	fr.Show = p.show;
 	fr:SetParent(p.parent);
+	if ( p.foreign or ( p.name and SurvivorUIOwns(p.name) ) ) then
+		-- another addon's to show: left as it was
+		return;
+	end
 	local unit = p.name and SHOWN_IF[p.name];
 	if ( ( unit and UnitExists and UnitExists(unit) ) or ( not unit and p.shown ) ) then
 		fr:Show();
@@ -252,18 +220,12 @@ local function Unpark(fr)
 	end
 end
 
--- A group (yours, the enemy's, your buffs) hidden or back: the frames by name, and (`under`) what
--- sits under the first of them (looked for while it's still there to measure, and again now and
--- then: B.Rescan).
-local BASE = { player = PLAYER_FRAMES[1], target = TARGET_FRAMES[1] };
-local function Group(key, names, on, under)
+-- A group (yours, the enemy's, your buffs) hidden or back: the frames by name. (Not what sits
+-- under them: that would take other addons' frames placed there; the skill and jewelry icons under
+-- your portrait are the game's own Build display, its own setting: Hide your skill icons.)
+local function Group(key, names, on)
 	if ( on and not B.groups[key] ) then
 		local list = {};
-		local base = getglobal(names[1]);
-		under = under and Under(base) or {};
-		for i = 1, table.getn(under) do
-			table.insert(list, { under[i], under[i].GetName and under[i]:GetName() });
-		end
 		for i = 1, table.getn(names) do
 			local fr = getglobal(names[i]);
 			if ( fr ) then
@@ -288,21 +250,9 @@ function B.Park()
 	if ( not s ) then
 		return;
 	end
-	Group("player", PLAYER_FRAMES, s.hidePlayer, true);
-	Group("target", TARGET_FRAMES, s.hideTarget, true);
-	Group("buffs", BUFF_FRAMES, s.hideBuffs, false);
-end
-
--- While a group is hidden: what has shown up under its frame since (a target's icons) goes too.
-function B.Rescan()
-	for key, list in pairs(B.groups) do
-		local under = BASE[key] and Under(getglobal(BASE[key])) or {};
-		for i = 1, table.getn(under) do
-			local name = under[i].GetName and under[i]:GetName();
-			ParkOne(under[i], name);
-			table.insert(list, { under[i], name });
-		end
-	end
+	Group("player", PLAYER_FRAMES, s.hidePlayer);
+	Group("target", TARGET_FRAMES, s.hideTarget);
+	Group("buffs", BUFF_FRAMES, s.hideBuffs);
 end
 
 -- What's hidden now, by name (for /ast what).
@@ -1495,10 +1445,10 @@ driver:SetScript("OnUpdate", function()
 	if ( B.dirty or not B.parkedOnce ) then
 		B.parkedOnce, B.dirty = true, nil;
 		B.Park();
-	end
-	if ( next(B.groups) and ( not B.rescanAt or now - B.rescanAt > 1 or now < B.rescanAt ) ) then
-		B.rescanAt = now;
-		B.Rescan();
+		if ( s.hideBuild and type(AZS_SetHudShown) == "function" and type(AZS_IsHudShown) == "function"
+			and AZS_IsHudShown("build") ) then
+			AZS_SetHudShown("build", false);
+		end
 	end
 	-- (a Test press shows it even while it's off)
 	if ( not s.on and not B.Testing() ) then

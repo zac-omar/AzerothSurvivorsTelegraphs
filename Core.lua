@@ -1190,6 +1190,9 @@ local function TipLines(method, a, b)
 	if ( not scan or not scan[method] ) then
 		return nil;
 	end
+	if ( AST and AST.EnhancedTips ) then
+		AST.EnhancedTips();
+	end
 	scan:SetOwner(WorldFrame, "ANCHOR_NONE");
 	scan:ClearLines();
 	local ok = pcall(scan[method], scan, a, b);
@@ -3984,6 +3987,18 @@ function AST.State()
 	return db, DEFS, myClass, skipped, byId;
 end
 
+-- The game's Enhanced Tooltips, kept on (before every tooltip read, and in the minimap's tick: Guardians.lua):
+-- with it off a skill's tooltip is its name alone, and the sizes can't be read. On is the game's own
+-- default, so nothing odd is left once the addon is gone.
+function AST.EnhancedTips()
+	if ( GetCVar and SetCVar ) then
+		local got, v = pcall(GetCVar, "UberTooltips");
+		if ( got and v == "0" ) then
+			pcall(SetCVar, "UberTooltips", "1");
+		end
+	end
+end
+
 -- For the hero bar (HeroBar.lua): a tooltip's lines (TipLines' methods), and a spell's cooldown as
 -- the spell line has it (by its name or key: left, max; nil when the line doesn't list it).
 AST.TipLines = TipLines;
@@ -4014,6 +4029,15 @@ function AST.HaveSkill(def)
 		return ( def.unlisted ~= nil and def.match ~= nil and Has(def, GetTime() - clockGap) ~= nil );
 	end
 	return def.match == nil;
+end
+
+-- Whether the minimap is square: a UI addon's that says so (GetMinimapShape, as SurvivorsDragonUi's
+-- does) or SurvivorUI's (its square border on the minimap). The pins and the button go by its sides.
+function AST.MinimapSquare()
+	if ( type(GetMinimapShape) == "function" and GetMinimapShape() == "SQUARE" ) then
+		return true;
+	end
+	return Minimap ~= nil and Minimap.survivorBorder ~= nil;
 end
 
 function AST.CooldownOf(name)
@@ -4068,9 +4092,19 @@ function AST.ClassChanged() end
 local minimapButton;
 
 local function PlaceMinimapButton()
+	if ( not minimapButton ) then
+		return;
+	end
 	local a = (db.minimapAngle or 225) * PI / 180;
+	local x, y = 80 * math.cos(a), 80 * math.sin(a);
+	if ( AST.MinimapSquare() ) then
+		-- a square map: just outside its side that way (80 round the middle would sit on a corner)
+		local edge = (Minimap:GetWidth() or 140) / 2 + 10;
+		local m = math.max(math.abs(math.cos(a)), math.abs(math.sin(a)));
+		x, y = edge * math.cos(a) / m, edge * math.sin(a) / m;
+	end
 	minimapButton:ClearAllPoints();
-	minimapButton:SetPoint("CENTER", Minimap, "CENTER", 80 * math.cos(a), 80 * math.sin(a));
+	minimapButton:SetPoint("CENTER", Minimap, "CENTER", x, y);
 end
 
 -- A spot on the minimap's edge, in degrees, clear of the buttons already there (the Damage
@@ -4215,6 +4249,11 @@ local function ShowMinimapButton(show)
 	end
 end
 AST.ShowMinimapButton = ShowMinimapButton;
+AST.PlaceMinimapButton = function()
+	if ( db ) then
+		PlaceMinimapButton();
+	end
+end;
 
 ---------------------------------------------------------------------------------------------
 -- Slash commands, saved settings

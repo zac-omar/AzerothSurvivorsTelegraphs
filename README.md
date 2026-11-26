@@ -213,7 +213,7 @@ Not shown: the T0.5 sets' 4-piece bonuses that change a size (Splitting Ice 7 yd
 | **Custom ring 2, 3, ...** | As many more as you like: **Add a ring** under the list. Any class rings show for every hero; a class page has its own, shown while you play that class | Your setting |
 | **Guardian wake range** | Around each guardian asleep at its lair: come this near (or hit it) and it wakes. It warms to red as you close in | 20 yd |
 | **Guardian leash** | Around the lair of a guardian that's chasing you: past this ring it gives up, walks home and heals to full. It warms to red as you near it, with a line under your hero ("gives up in 8 yd") | 97.5 yd from its lair |
-| **Minimap pins** | On the minimap: guardians (white asleep, red when chasing you), empty lairs with the time until they fill, bosses and caches. Ones past the minimap's edge wait on its rim. While you play, the game's own red flag on the nearest guardian is hidden (it comes back when you leave the game, so removing the addon leaves your game as it was) | |
+| **Minimap pins** | On the minimap: guardians (white asleep, red when chasing you), empty lairs with the time until they fill, bosses and caches. Ones past the minimap's edge wait on its rim. While you play, the game's own red flag on the nearest guardian is hidden (it comes back when you leave the game, so removing the addon leaves your game as it was; with Survivor UI or SurvivorsDragonUi the flag is left to their own setting) | |
 | **Minimap range ring** | On the minimap, round you: how far your chosen skill reaches. It lights up when a guardian's lair is within it, so you can strike the guardian the moment it appears | your skill's range |
 
 Guardians: one asleep at its lair wakes when it's hit, or when a hero comes within 20 yd of it. Once awake it follows you while you're within 97.5 yd of its lair (not of the guardian). Go past that and it gives up, walks home and heals back to full health. Hit it on the way and it turns around. On its way home, coming near doesn't wake it; only a hit does. In a party it first turns to another hero still within reach of its lair.
@@ -353,5 +353,7 @@ Each class's telegraphs are in a file of their own (`ClassPriest.lua`), and the 
 
 ## Notes
 
+- **Works alongside Survivor UI and SurvivorsDragonUi.** On their square minimaps the pins, the range ring and the minimap button keep to the square's edge, and they stay over the minimap and fade with it. The hero bar's frame options only ever hide the game's own frames.
+- The game's **Enhanced Tooltips** setting is kept on: sizes are read from your skills' tooltips, which show only the skill's name with it off.
 - The addon draws through the game's world-anchor API. It needs at least one enemy, cache or lair on the map to place shapes, so telegraphs can be missing for the first moment of a run.
 - This is an unofficial fan-made addon.

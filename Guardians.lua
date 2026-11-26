@@ -310,7 +310,9 @@ local function Pin(n, look, dx, dy, s, half, st, timer)
 	local L = LOOK[look];
 	local size = st.pinSize * L[7];
 	local ox, oy = -dy * s, dx * s;
-	local r, edge = math.sqrt(ox * ox + oy * oy), half - size * 0.5;
+	-- (how far out: round the middle, or on a square map (a UI addon's) out to its sides)
+	local r = G.square and math.max(math.abs(ox), math.abs(oy)) or math.sqrt(ox * ox + oy * oy);
+	local edge = half - size * 0.5;
 	local alpha = L[6][4];
 	if ( r > edge ) then
 		if ( not st.pinEdge or r <= 0 ) then
@@ -439,6 +441,8 @@ local NEAR = 50;            -- "only near a lair": shown while one is this far p
 local MAXDOTS = 400;
 
 G.CLASSES = { "warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid" };
+-- The frame layers, bottom to top (keeping the pins on the minimap's own).
+G.LAYERS = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 };
 G.NEAR = NEAR;
 
 -- The ring's settings, its own defaults filled in (they live with its telegraph's, so Reset and
@@ -740,7 +744,8 @@ function G.UpdateRing(n)
 		local mr = pinSt.pinSize * 0.75;
 		for i = 1, reach.n do
 			local ox, oy = -G.marks[i][2] * sc, G.marks[i][1] * sc;
-			local d, edge = math.sqrt(ox * ox + oy * oy), half - mr;
+			local d = G.square and math.max(math.abs(ox), math.abs(oy)) or math.sqrt(ox * ox + oy * oy);
+			local edge = half - mr;
 			if ( d > edge and d > 0 ) then
 				ox, oy = ox * edge / d, oy * edge / d;
 			end
@@ -771,12 +776,17 @@ function G.UpdateRing(n)
 	else
 		G.ringText:Hide();
 	end
-	-- in range: a slow beat
+	-- in range: a slow beat. Times the minimap's own opacity: a frame's SetAlpha writes it into
+	-- every frame under it, so a UI addon fading the minimap out (SurvivorUI while you choose a
+	-- card) would otherwise leave the ring showing on its own.
 	local beat = 1;
 	if ( hot and s.mmPulse ) then
 		beat = 0.6 + 0.4 * (0.5 + 0.5 * math.sin(GetTime() * 2 * PI * 1.1));
 	end
-	ring:SetAlpha(beat);
+	beat = beat * ( Minimap.GetAlpha and Minimap:GetAlpha() or 1 );
+	if ( math.abs(( ring:GetAlpha() or 1 ) - beat) > 0.004 ) then
+		ring:SetAlpha(beat);
+	end
 	G.hot, G.near, G.R = hot, near, R;
 	return n;
 end
@@ -790,6 +800,11 @@ function G.Flag(want)
 	local db = AST.State();
 	if ( not db or type(AZS_SetHudShown) ~= "function" or type(AZS_IsHudShown) ~= "function" ) then
 		return;
+	end
+	-- SurvivorUI and SurvivorsDragonUi show their own guardian pins and keep the game's flag
+	-- themselves, each with a setting of its own for it: left to them (shown again if we'd hidden it)
+	if ( IsAddOnLoaded and ( IsAddOnLoaded("SurvivorUI") or IsAddOnLoaded("SurvivorsDragonUi") ) ) then
+		want = false;
 	end
 	if ( want ) then
 		if ( AZS_IsHudShown("flag") ) then
@@ -807,10 +822,41 @@ frame:SetScript("OnUpdate", function()
 	since = since + (arg1 or 0);
 	if ( since >= 0.05 ) then
 		since = 0;
+		-- on the minimap's own layer, over it: a UI addon can move the minimap to another
+		-- (SurvivorsDragonUi's is MEDIUM) after these were made
+		if ( Minimap.GetFrameStrata ) then
+			local ms, ml = Minimap:GetFrameStrata(), Minimap:GetFrameLevel() or 1;
+			local own = { { frame, 4 }, { G.ring, 3 }, { getglobal("ASTMinimapButton"), 10 } };
+			for i = 1, 3 do
+				local f, up = own[i][1], own[i][2];
+				local fs = f and f:GetFrameStrata();
+				if ( f and ms and fs ) then
+					-- (only ever up to the minimap's layer, never down from a higher one)
+					if ( ( G.LAYERS[fs] or 0 ) < ( G.LAYERS[ms] or 0 ) ) then
+						f:SetFrameStrata(ms);
+						fs = ms;
+					end
+					if ( fs == ms and ( f:GetFrameLevel() or 0 ) < ml + up ) then
+						f:SetFrameLevel(ml + up);
+					end
+				end
+			end
+		end
+		local square = AST.MinimapSquare and AST.MinimapSquare() or false;
+		if ( square ~= G.square ) then
+			G.square = square;
+			if ( AST.PlaceMinimapButton ) then
+				AST.PlaceMinimapButton();
+			end
+		end
 		G.UpdatePins();
 		local phase = type(AZS_GetPhase) == "function" and AZS_GetPhase();
 		-- (not for a moment after leaving: the world may still tick on its way out)
 		G.Flag(phase ~= nil and not ( G.leaving and GetTime() - G.leaving < 3 ));
+		-- the game's Enhanced Tooltips kept on (the sizes are read from the skills' tooltips)
+		if ( AST.EnhancedTips ) then
+			AST.EnhancedTips();
+		end
 	end
 end);
 frame:RegisterEvent("PLAYER_LEAVING_WORLD");
