@@ -39,6 +39,8 @@ local DEF = {
 	text = "percent", textSize = 11, textPos = "center",
 	name = true, namePos = "above", nameSize = 11, nameColor = "kind", kindTag = true, tot = false,
 	power = false, powerHeight = 4,
+	-- its level: "name" (before its name), "left" (a small box left of the bar) or "inside"
+	level = false, levelPos = "name", levelSize = 11, levelRGB = { 1, 0.82, 0.2 },
 	debuffs = true, debuffsMax = 16, debuffSize = 20, debuffSide = "above", debuffAlign = "left",
 	buffs = true, buffsMax = 8, buffSize = 18, buffSide = "below", buffAlign = "left",
 	auraGap = 2, perRow = 8, stacks = true, timers = true, shade = true, typeColor = true, tips = false,
@@ -254,6 +256,9 @@ local function Make()
 	P.power = Tex("ARTWORK", SHADED);
 	P.mark = Tex("OVERLAY", SOLID);
 	P.handle = Tex("OVERLAY", SOLID);
+	P.levelBg = Tex("BORDER", SOLID);
+	P.levelFs = f:CreateFontString(nil, "OVERLAY");
+	Font(P.levelFs, 11);
 	P.text = f:CreateFontString(nil, "OVERLAY");
 	P.name = f:CreateFontString(nil, "OVERLAY");
 	P.tot = f:CreateFontString(nil, "OVERLAY");
@@ -303,7 +308,7 @@ local function Demo(t)
 		hp = hp - 0.08;
 	end
 	local d = { name = AST_L("Test enemy"), hp = math.max(0.02, hp) * 12000, mx = 12000, exact = true, kind = "guardian",
-		pw = 60 + 30 * math.sin(t), pmx = 100, ptype = 0, demo = true };
+		pw = 60 + 30 * math.sin(t), pmx = 100, ptype = 0, demo = true, level = 14 };
 	d.tot = UnitName and UnitName("player") or nil;
 	local deb = {
 		{ tex = "Interface\\Icons\\Spell_Shadow_ShadowWordPain", stacks = 3, left = 18 - t, max = 18, type = "Magic" },
@@ -361,6 +366,7 @@ function T.Read()
 		d.kind = Kind(AZS_UnitKind and AZS_UnitKind("target"));
 	end
 	d.dead = ( UnitIsDead and UnitIsDead("target") ) and true or false;
+	d.level = UnitLevel and UnitLevel("target");
 	d.pw = UnitMana and UnitMana("target") or 0;
 	d.pmx = UnitManaMax and UnitManaMax("target") or 0;
 	d.ptype = UnitPowerType and UnitPowerType("target") or 0;
@@ -498,15 +504,61 @@ local function KindWord(kind)
 	return nil;
 end
 
--- Its name line: the name (in its kind's colour, or white), its kind's word after it.
+-- Its level as shown: the number, "??" where the game hides it (-1), nil with none.
+local function LevelText(d)
+	local lv = tonumber(d.level);
+	if ( lv == -1 ) then
+		return "??";
+	elseif ( lv and lv > 0 ) then
+		return tostring(lv);
+	end
+	return nil;
+end
+
+-- Its name line: its level first (if it goes with the name), the name (in its kind's colour, or
+-- white), its kind's word after it.
 local function NameText(s, d)
 	local c = s.nameColor == "kind" and KindColor(s, d.kind) or WHITE;
 	local text = Hex(c, 0.35) .. ( d.name or "" ) .. "|r";
+	local lv = s.level and s.levelPos == "name" and LevelText(d);
+	if ( lv ) then
+		text = Hex(s.levelRGB) .. lv .. "|r  " .. text;
+	end
 	local word = KindWord(d.kind);
 	if ( s.kindTag and word ) then
 		text = text .. "  " .. Hex(KindColor(s, d.kind), 0.1) .. word .. "|r";
 	end
 	return text;
+end
+
+-- Its level by the bar: a number in a small dark box left of it, or inside it at its left (with the
+-- name: on the name's line, NameText). With its name off, "with the name" is the box.
+local function Level(s, d, W, H, y0, a)
+	local lv = s.level and LevelText(d);
+	local at = s.levelPos;
+	if ( at == "name" and not s.name ) then
+		at = "left";
+	end
+	if ( not lv or at == "name" ) then
+		Off(P.levelBg);
+		P.levelFs:Hide();
+		return;
+	end
+	local fs, c = P.levelFs, s.levelRGB;
+	Font(fs, s.levelSize);
+	Say(fs, lv);
+	fs:SetTextColor(c[1], c[2], c[3], a);
+	fs:ClearAllPoints();
+	if ( at == "inside" ) then
+		fs:SetPoint("LEFT", f, "BOTTOMLEFT", 4, y0 + H / 2);
+		Off(P.levelBg);
+	else
+		local tw = ( fs.GetStringWidth and fs:GetStringWidth() ) or s.levelSize * 1.2;
+		local bw, bh = math.max(tw + 8, s.levelSize + 6), math.max(H + y0, s.levelSize + 4);
+		Put(P.levelBg, -bw - 2, (H + y0 - bh) / 2, bw, bh, 0, 0, 0, a * math.max(0.6, s.bgAlpha));
+		fs:SetPoint("CENTER", f, "BOTTOMLEFT", -bw / 2 - 2, (H + y0) / 2);
+	end
+	fs:Show();
 end
 
 function T.Paint(d, now, dt)
@@ -689,6 +741,7 @@ function T.Paint(d, now, dt)
 	else
 		P.tot:Hide();
 	end
+	Level(s, d, W, H, y0, a);
 	-- unlocked: a handle and a hint, and it takes the mouse
 	if ( not s.locked ) then
 		Put(P.handle, -3, -3, W + 6, H + y0 + 6, 0.75, 0.55, 1, 0.25 + 0.1 * math.sin(now * 4));

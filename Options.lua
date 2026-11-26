@@ -433,18 +433,49 @@ local function Scrolls(panel, floor, moreY)
 	panel:SetScript("OnMouseWheel", function() panel.Scroll(arg1); end);
 end
 
--- `hint`: a line beside the box on what it does.
-local function Check(panel, label, when, get, set, hint)
+-- `hint`: a line beside the box on what it does. `note()`: while it gives a text (already in the
+-- game's language), another addon is handling what the box does: that text shows in the hint's place,
+-- in amber, and the box dims and can't be clicked (it keeps your choice, for when the addon stops).
+-- Asked again at each click and all the while the window is open (the other addon's setting can
+-- change with it open), so the box is back as soon as it's free.
+local function Check(panel, label, when, get, set, hint, note)
 	local row = Row(panel, label, when);
 	local b = Button(row, "", 16, 16, function()
+		if ( note and note() ) then
+			return;
+		end
 		set(not get());
 		Refresh();
 	end);
 	b:SetPoint("LEFT", row, "LEFT", CX, 0);
-	if ( hint ) then
-		local text = Label(row, hint);
+	if ( hint or note ) then
+		local text = Label(row, hint or "");
 		text:SetTextColor(0.55, 0.55, 0.6);
 		text:SetPoint("LEFT", b, "RIGHT", 8, 0);
+		if ( note ) then
+			local function Apply()
+				local n = note();
+				if ( n ) then
+					text:SetText(n);
+					text:SetTextColor(1, 0.72, 0.3);
+					b:SetAlpha(0.5);
+					if ( b.Disable ) then
+						b:Disable();
+					end
+				else
+					text:SetText(hint and L(hint) or "");
+					text:SetTextColor(0.55, 0.55, 0.6);
+					b:SetAlpha(1);
+					if ( b.Enable ) then
+						b:Enable();
+					end
+				end
+			end
+			table.insert(panel.refreshers, Apply);
+			if ( panel.live ) then
+				table.insert(panel.live, Apply);
+			end
+		end
 	end
 	local mark = b:CreateTexture(nil, "OVERLAY");
 	AST.SetPiece(mark, SOLID);
@@ -2063,6 +2094,34 @@ local function HeroPicks(h)
 	end);
 end
 
+-- A setting another addon is handling: which addon, and which of its settings, in its own words (the
+-- user, 2026-11-26: "an indication/note when they are being controlled ... by another addon", "which
+-- addon + that addons setting"). Only the sentence round them is translated.
+local function HandledBy(addon, setting)
+	return string.format(L("Handled by %s (its \"%s\" setting)."), addon, setting);
+end
+
+-- Survivor UI's module `key` handling a setting: its note (`name`: the module as Survivor UI names it),
+-- or nil. Its Unit frames and Buffs switch only with a reload, so it's the module as it runs (as it was
+-- set when you entered the world: AST.bar.sui) that counts; one switched off there but not reloaded
+-- yet still handles it, "until you reload".
+local function SuiNote(key, name)
+	if ( not ( IsAddOnLoaded and IsAddOnLoaded("SurvivorUI") and type(SurvivorUI_Feature) == "function" ) ) then
+		return nil;
+	end
+	local saved = SurvivorUI_Feature(key) and true or false;
+	local running = AST.bar and AST.bar.sui and AST.bar.sui[key];
+	if ( running == nil ) then
+		running = saved;
+	end
+	if ( running and saved ) then
+		return HandledBy("Survivor UI", name);
+	elseif ( running ) then
+		return string.format(L("Handled by %s (its \"%s\" setting) until you reload."), "Survivor UI", name);
+	end
+	return nil;
+end
+
 -- The Bars page: the hero bar's settings or the target bar's, one at a time, chosen by a row of two
 -- tabs over each one's own (the user, 2026-11-26: "combine hero and target bars into one Bars tab -
 -- then have hero and target bars as tabs inside with theire repective sub tabs").
@@ -2100,9 +2159,9 @@ local function BuildHero()
 	BarSwitch(h);
 	-- its parts on tabs along its top (the user, 2026-11-25: the page was long); the last one shown
 	-- is kept for the session
-	local SUBS = { { "bar", "Bar", 60 }, { "health", "Health & mana", 116 }, { "shields", "Shields", 72 }, { "icons", "Icons", 60 },
-		{ "frames", "Game frames", 104 } };
-	h.sub = ui.heroTab or "bar";
+	-- (the game's frames are on the Bar tab, as the target bar's: the user, 2026-11-26)
+	local SUBS = { { "bar", "Bar", 60 }, { "health", "Health & mana", 116 }, { "shields", "Shields", 72 }, { "icons", "Icons", 60 } };
+	h.sub = ( ui.heroTab ~= "frames" and ui.heroTab ) or "bar";
 	local tabs, tx = {}, 12;
 	for i = 1, table.getn(SUBS) do
 		local id = SUBS[i][1];
@@ -2183,6 +2242,13 @@ local function BuildHero()
 	Check(h, "Show mana", nil, Get("power"), Set("power"), "Or rage, or energy: a thin bar under your health.");
 	Stepper(h, "Mana height", Yes("power"), Get("powerHeight"), Set("powerHeight"), 1, 1, 20, Px);
 
+	Section(h, "Level");
+	Check(h, "Show level", nil, Get("level"), Set("level"), "Your level in this run, by the bar.");
+	Choice(h, "Level at", Yes("level"), { { "left", "Left", 50 }, { "inside", "Inside", 60 }, { "above", "Above", 56 } },
+		Get("levelPos"), Set("levelPos"));
+	Stepper(h, "Level size", Yes("level"), Get("levelSize"), Set("levelSize"), 1, 7, 24, Px);
+	Color(h, "Level colour", Yes("level"), "levelRGB", S);
+
 	h.subTag = "shields";
 	Section(h, "Shields");
 	Check(h, "Show shields", nil, Get("shield"), Set("shield"), "Laid over your health: past 100% another layer goes over the first.");
@@ -2217,31 +2283,40 @@ local function BuildHero()
 	Check(h, "Grey while waiting", Yes("cooldowns"), Get("grey"), Set("grey"), "A skill on cooldown in grey.");
 	HeroPicks(h);
 
-	h.subTag = "frames";
+	h.subTag = "bar";
 	Section(h, "Game frames");
+	-- (Survivor UI's own unit frames in place of the game's: these do nothing while they're on; said on
+	-- the row)
+	local function UnitNote() return SuiNote("unitFrames", "Unit frames"); end
 	Check(h, "Hide your frame", nil, Get("hidePlayer"), function(v) S().hidePlayer = v; B.Park(); end,
-		"The game's player frame.");
+		"The game's player frame.", UnitNote);
 	-- the skill and jewelry icons under your frame: the game draws them itself, so they're its own
-	-- "Show Build" setting (its Interface page has it too), switched here
-	-- (not while Survivor UI keeps the game's row away itself, for its Build list: its to show then,
-	-- and unticking here would bring the game's row back beside its list)
+	-- "Show Build" setting (its Interface page has it too), switched here. While Survivor UI keeps the
+	-- game's row away itself (for its Build list) the game's setting is left to it (unticking here
+	-- would bring the game's row back beside its list): the box keeps your choice, the row says so.
 	local function SuiBuild()
 		local d = IsAddOnLoaded and IsAddOnLoaded("SurvivorUI") and SurvivorUIDB;
 		return d and ( ( d.buildList ~= false and not d.gameBuildToo ) or d.noGameBuild ) and true or false;
 	end
-	local function HasBuild() return type(AZS_SetHudShown) == "function" and type(AZS_IsHudShown) == "function" and not SuiBuild(); end
-	Check(h, "Hide your skill icons", HasBuild, function() return HasBuild() and not AZS_IsHudShown("build"); end,
+	local function HasBuild() return type(AZS_SetHudShown) == "function" and type(AZS_IsHudShown) == "function"; end
+	Check(h, "Hide your skill icons", HasBuild, function()
+			if ( SuiBuild() ) then
+				return S().hideBuild and true or false;
+			end
+			return HasBuild() and not AZS_IsHudShown("build");
+		end,
 		function(v)
 			-- (kept as ours too, put on again each session: SurvivorUI turns the game's back on as it closes)
 			S().hideBuild = v or nil;
-			if ( HasBuild() ) then
+			if ( HasBuild() and not SuiBuild() ) then
 				AZS_SetHudShown("build", not v);
 			end
-		end, "The game's skill and jewelry icons under your frame (its Show Build setting).");
+		end, "The game's skill and jewelry icons under your frame (its Show Build setting).",
+		function() return SuiBuild() and HandledBy("Survivor UI", "Build list") or nil; end);
 	Check(h, "Hide your buffs", nil, Get("hideBuffs"), function(v) S().hideBuffs = v; B.Park(); end,
-		"The game's buff icons by the minimap (the hero bar can show them instead).");
-	Check(h, "Hide enemy frame", nil, Get("hideTarget"), function(v) S().hideTarget = v; B.Park(); end,
-		"The frame of the enemy you target.");
+		"The game's buff icons by the minimap (the hero bar can show them instead).",
+		function() return SuiNote("buffs", "Buffs"); end);
+	-- (the enemy's frame: on the target bar's page, the bar that takes its place; one box for it)
 	Text(h, "/ast what", nil, function() return L("names the frame under the mouse, and what these hide"); end);
 
 	h.subTag = "bar";
@@ -2328,7 +2403,8 @@ local function BuildTarget()
 
 	Section(h, "Game frames");
 	Check(h, "Hide enemy frame", nil, function() return AST.bar.S().hideTarget; end,
-		function(v) AST.bar.S().hideTarget = v; AST.bar.Park(); end, "The frame of the enemy you target.");
+		function(v) AST.bar.S().hideTarget = v; AST.bar.Park(); end, "The frame of the enemy you target.",
+		function() return SuiNote("unitFrames", "Unit frames"); end);
 
 	Section(h, "Start over");
 	Actions(h, "Target bar", nil, { { "Reset the target bar", function()
@@ -2380,6 +2456,13 @@ local function BuildTarget()
 	Choice(h, "Name colour", Yes("name"), { { "kind", "By kind", 70 }, { "white", "White", 60 } }, Get("nameColor"), Set("nameColor"));
 	Check(h, "Its kind", Yes("name"), Get("kindTag"), Set("kindTag"), "Elite, Guardian or Boss after its name.");
 	Check(h, "Its target", nil, Get("tot"), Set("tot"), "Whom it's after, at the right of its name.");
+	Section(h, "Level");
+	Check(h, "Show level", nil, Get("level"), Set("level"), "Its level, with its name or by the bar.");
+	Choice(h, "Level at", Yes("level"), { { "name", "With the name", 110 }, { "left", "Left", 50 }, { "inside", "Inside", 60 } },
+		Get("levelPos"), Set("levelPos"));
+	Stepper(h, "Level size", function() return S().level and ( S().levelPos ~= "name" or not S().name ); end,
+		Get("levelSize"), Set("levelSize"), 1, 7, 24, Px);
+	Color(h, "Level colour", Yes("level"), "levelRGB", S);
 
 	h.subTag = "auras";
 	Section(h, "Debuffs");

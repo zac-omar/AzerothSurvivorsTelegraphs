@@ -228,13 +228,13 @@ Your talents come from the damage meter, which lists each one with its rank. If 
 
 ## Hero bar
 
-A health bar of your own, off to start with: turn it on in the options under **Bars**, on its **Hero bar** tab. It has tabs of its own: Bar, Health & mana, Shields, Icons and Game frames.
+A health bar of your own, off to start with: turn it on in the options under **Bars**, on its **Hero bar** tab. It has tabs of its own: Bar (with the game frames it can hide), Health & mana, Shields and Icons.
 
 - **Where it goes:** wherever you drag it (unlock it first), above your hero or under your hero, at any scale. Three looks to start from: Subdued, Sleek and Bold.
-- **Health:** coloured by health, by class or in your own colour, with a damage trail, a low-health warning and the numbers in any of several forms. Mana (or rage, or energy) can sit underneath.
+- **Health:** coloured by health, by class or in your own colour, with a damage trail, a low-health warning and the numbers in any of several forms. Mana (or rage, or energy) can sit underneath, and your level in the run beside it.
 - **Shields:** laid over your health. Past 100% a second layer goes over the first, and a third past 200%, each in its own colour. Or show just a fixed mark at the bar's end while you have any shield. The shield can also be added into the health numbers.
 - **Icons:** your skills from action bars 1 to 6, the jewelry you wear and your buffs, under or over the bar, with their cooldowns if you want them. Pick exactly which ones show: each class's skills on their own, and one list each for jewelry and buffs.
-- **Game frames:** hide the game's own player frame, your skill and jewelry icons under it, the buff icons by the minimap, or the enemy's frame.
+- **Game frames:** hide the game's own player frame, your skill and jewelry icons under it, or the buff and debuff icons by the minimap (the enemy's frame: on the target bar's page). Where another addon is handling one of these (Survivor UI's Unit frames, Buffs or Build list), its box says which addon and which of its settings, and can't be changed until that addon stops handling it (your choice is kept).
 - **Test** plays a short demo, even with the bar turned off. `/ast bar` shows or hides it (`/ast bar lock`, `unlock`, `test`, `reset`).
 
 ## Target bar
@@ -243,8 +243,9 @@ The enemy you target on a bar like the hero bar, off to start with: turn it on i
 
 - **Where it goes:** wherever you drag it (unlock it first), or beside the hero bar on any side, at any scale. The hero bar's three looks: Subdued, Sleek and Bold.
 - **Health:** its real numbers where the game gives them, else its share. Coloured by what it is (enemies, elites, guardians, bosses and friends each in a colour you choose), by health, or in your own colour, with a damage trail. An **execute range** marks a share of its health and lights the bar once it's below it. Its mana can sit underneath.
-- **Name and numbers:** its name above, inside or under the bar, with Elite, Guardian or Boss after it, whom it's after, and the numbers in any of the hero bar's forms.
+- **Name and numbers:** its name above, inside or under the bar, with Elite, Guardian or Boss after it, whom it's after, its level (before its name or beside the bar), and the numbers in any of the hero bar's forms.
 - **Debuffs and buffs:** each in its own rows, above or under the bar, with how many, their size and how they line up. Their stacks, the seconds left and a shade over the time gone (where the game tells it: a guardian's and a boss's), an edge coloured by what takes a debuff off, and tooltips if you want them.
+- **The game's enemy frame** can be hidden from its page too, for the target bar to take its place.
 - **Test** plays a short demo, even with it turned off. `/ast target` shows or hides it (`/ast target lock`, `unlock`, `test`, `reset`).
 
 ## Languages

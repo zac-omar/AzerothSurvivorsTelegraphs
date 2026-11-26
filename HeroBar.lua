@@ -36,7 +36,10 @@ local POWER = { [0] = { 0.25, 0.5, 1 }, [1] = { 0.9, 0.2, 0.2 }, [2] = { 1, 0.5,
 local PLAYER_FRAMES = { "PlayerFrame" };
 -- your buffs by the minimap: their own setting (the user, 2026-11-25: hidden with your frame, they
 -- were missed)
-local BUFF_FRAMES = { "BuffFrame", "TemporaryEnchantFrame" };
+-- (and your debuffs' buttons by name: SurvivorsDragonUi moves them out of the buff frame into a row
+-- of its own, so they'd stay; the game's own frame holds them, and they go with it either way)
+local BUFF_FRAMES = { "BuffFrame", "TemporaryEnchantFrame", "BuffButton16", "BuffButton17", "BuffButton18", "BuffButton19",
+	"BuffButton20", "BuffButton21", "BuffButton22", "BuffButton23" };
 local TARGET_FRAMES = { "TargetFrame", "TargetofTargetFrame", "ComboFrame" };
 
 -- Every setting and where it starts (the Sleek look).
@@ -51,6 +54,8 @@ local DEF = {
 	sheen = true, smooth = true, trail = true, lowAt = 30,
 	text = "percent", textSize = 11, textPos = "center", textShield = false,
 	power = false, powerHeight = 4,
+	-- your level in the run: "left" (a small box left of the bar), "inside" or "above"
+	level = false, levelPos = "left", levelSize = 11, levelRGB = { 1, 0.82, 0.2 },
 	shield = true, shieldLook = "energy", shieldText = true, shieldAlpha = 0.7, shieldFx = true,
 	-- "amount": layers as long as the shield holds; "marker": the bar's right end (shieldMark %)
 	-- covered while you have any shield, the same however much it holds
@@ -417,9 +422,12 @@ local function Make()
 	P.flash = Tex("OVERLAY", SOLID);
 	P.burst = Tex("OVERLAY", GLOW, "ADD");
 	P.handle = Tex("OVERLAY", SOLID);
+	P.levelBg = Tex("BORDER", SOLID);
 	P.text = f:CreateFontString(nil, "OVERLAY");
 	P.shieldTextFs = f:CreateFontString(nil, "OVERLAY");
 	P.hint = f:CreateFontString(nil, "OVERLAY");
+	P.levelFs = f:CreateFontString(nil, "OVERLAY");
+	Font(P.levelFs, 11);
 	Font(P.text, 11);
 	Font(P.shieldTextFs, 10);
 	Font(P.hint, 10);
@@ -730,6 +738,36 @@ local function Marker(s, W, y, h, now, a)
 	end
 end
 
+-- Your level in the run (the game's run line, else the client's): a number in a small dark box left
+-- of the bar, inside it at its left, or over it.
+local function Level(s, W, H, y0, a)
+	local lv = ( B.test and GetTime() < B.test ) and 12 or ( tonumber(AZS_RUN and AZS_RUN.lvl)
+		or ( UnitLevel and UnitLevel("player") ) );
+	if ( not s.level or not lv or lv <= 0 ) then
+		Off(P.levelBg);
+		P.levelFs:Hide();
+		return;
+	end
+	local fs, c = P.levelFs, s.levelRGB;
+	Font(fs, s.levelSize);
+	fs:SetText(tostring(lv));
+	fs:SetTextColor(c[1], c[2], c[3], a);
+	fs:ClearAllPoints();
+	if ( s.levelPos == "inside" ) then
+		fs:SetPoint("LEFT", f, "BOTTOMLEFT", 4, y0 + H / 2);
+		Off(P.levelBg);
+	elseif ( s.levelPos == "above" ) then
+		fs:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 0, 2);
+		Off(P.levelBg);
+	else
+		local tw = ( fs.GetStringWidth and fs:GetStringWidth() ) or s.levelSize * 1.2;
+		local bw, bh = math.max(tw + 8, s.levelSize + 6), math.max(H + y0, s.levelSize + 4);
+		Put(P.levelBg, -bw - 2, (H + y0 - bh) / 2, bw, bh, 0, 0, 0, a * math.max(0.6, s.bgAlpha));
+		fs:SetPoint("CENTER", f, "BOTTOMLEFT", -bw / 2 - 2, (H + y0) / 2);
+	end
+	fs:Show();
+end
+
 function B.Paint(now, dt)
 	local s = B.S();
 	if ( not s ) then
@@ -916,6 +954,7 @@ function B.Paint(now, dt)
 	else
 		P.shieldTextFs:Hide();
 	end
+	Level(s, W, H, y0, a);
 	-- unlocked: a handle and a hint, and it takes the mouse
 	if ( not s.locked ) then
 		Put(P.handle, -3, -3, W + 6, H + y0 + 6, 0.75, 0.55, 1, 0.25 + 0.1 * math.sin(now * 4));
@@ -1450,10 +1489,14 @@ driver:SetScript("OnUpdate", function()
 	if ( B.dirty or not B.parkedOnce ) then
 		B.parkedOnce, B.dirty = true, nil;
 		B.Park();
-		if ( s.hideBuild and type(AZS_SetHudShown) == "function" and type(AZS_IsHudShown) == "function"
-			and AZS_IsHudShown("build") ) then
-			AZS_SetHudShown("build", false);
-		end
+		B.buildUntil = now + 5;
+	end
+	-- "Hide your skill icons": put on again at the start (and on entering the world) and kept for a few
+	-- seconds (Survivor UI shows the game's row again as you enter, once its Build list is off), then
+	-- left alone
+	if ( s.hideBuild and B.buildUntil and now < B.buildUntil and type(AZS_SetHudShown) == "function"
+		and type(AZS_IsHudShown) == "function" and AZS_IsHudShown("build") ) then
+		AZS_SetHudShown("build", false);
 	end
 	-- (a Test press shows it even while it's off)
 	-- The game's cards up (a level's, a new piece of jewelry): put away. The game draws over its veil
@@ -1476,6 +1519,20 @@ driver:SetScript("OnUpdate", function()
 	if ( acc >= 0.1 or not B.shown.icons ) then
 		acc = 0;
 		B.Icons(now);
+	end
+end);
+
+-- Entering the world: the game's frames put away again, "Hide your skill icons" kept a few seconds
+-- more (above), and Survivor UI's modules that wait for a reload (its Unit frames, its Buffs) taken
+-- as they are now: they run as they were set then until the next reload, whatever its setting says
+-- meanwhile (Options' notes say so; the user, 2026-11-26, with all its modules switched off but not
+-- reloaded).
+driver:RegisterEvent("PLAYER_ENTERING_WORLD");
+driver:SetScript("OnEvent", function()
+	B.dirty = true;
+	if ( type(SurvivorUI_Feature) == "function" ) then
+		B.sui = { unitFrames = SurvivorUI_Feature("unitFrames") and true or false,
+			buffs = SurvivorUI_Feature("buffs") and true or false };
 	end
 end);
 
