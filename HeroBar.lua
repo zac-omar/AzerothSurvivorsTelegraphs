@@ -14,6 +14,11 @@
 local B = { icons = {}, parked = {}, groups = {}, buffMax = {}, names = {}, test = nil, shown = {} };
 AST.bar = B;
 
+-- Whether the game's cards are up (a level's or a new piece of jewelry's): its "choosing" phase.
+function AST.CardsUp()
+	return type(AZS_GetPhase) == "function" and AZS_GetPhase() == "choosing";
+end
+
 local SOLID = "Interface\\Buttons\\WHITE8X8";
 local SHADED = "Interface\\TargetingFrame\\UI-StatusBar";
 local GLOW = "Spells\\GENERICGLOW64";
@@ -1451,7 +1456,10 @@ driver:SetScript("OnUpdate", function()
 		end
 	end
 	-- (a Test press shows it even while it's off)
-	if ( not s.on and not B.Testing() ) then
+	-- The game's cards up (a level's, a new piece of jewelry): put away. The game draws over its veil
+	-- any art its card screen shows too (your spells' icons in its row of spells), so a skill's icon
+	-- here would come through on the cards (the user, 2026-11-26: Power Word: Shield's on a card).
+	if ( ( not s.on and not B.Testing() ) or AST.CardsUp() ) then
 		if ( f ) then
 			f:Hide();
 		end

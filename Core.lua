@@ -4398,6 +4398,19 @@ SlashCmdList["ASTELEGRAPHS"] = function(msg)
 			s.on = not s.on;
 		end
 		AST.RefreshOptions();
+	elseif ( cmd == "target" and AST.tbar ) then
+		-- /ast target: the target bar on or off; lock, unlock, reset (all its settings), test (its demo)
+		local s = AST.tbar.S();
+		if ( rest == "lock" or rest == "unlock" ) then
+			s.locked = rest == "lock";
+		elseif ( rest == "reset" ) then
+			AST.tbar.Reset();
+		elseif ( rest == "test" ) then
+			AST.tbar.Test();
+		else
+			s.on = not s.on;
+		end
+		AST.RefreshOptions();
 	elseif ( cmd == "what" and AST.bar ) then
 		-- /ast what: the frame under the mouse (to tell what a setting hides)
 		AST.bar.What();

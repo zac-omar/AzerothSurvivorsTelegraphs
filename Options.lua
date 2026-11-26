@@ -34,6 +34,7 @@ local ICONS = {
 	class = "Interface\\Icons\\INV_Misc_QuestionMark",
 	addon = "Interface\\Icons\\Spell_Holy_HolyNova",
 	hero = "Interface\\Icons\\Spell_Holy_SealOfProtection",
+	target = "Interface\\Icons\\Ability_Hunter_SniperShot",
 };
 
 local W, H = 800, 600;          -- the window
@@ -79,6 +80,11 @@ local function Refresh()
 	if ( ui.hero and ui.hero:IsShown() ) then
 		for i = 1, table.getn(ui.hero.refreshers) do
 			ui.hero.refreshers[i]();
+		end
+	end
+	if ( ui.target and ui.target:IsShown() ) then
+		for i = 1, table.getn(ui.target.refreshers) do
+			ui.target.refreshers[i]();
 		end
 	end
 end
@@ -763,7 +769,7 @@ local function BuildNav()
 	ui.tabs = {};
 	Tab("general", ICONS.general, "General");
 	Tab("all", ICONS.addon, "All telegraphs");
-	Tab("hero", ICONS.hero, "Hero bar");
+	Tab("bars", ICONS.hero, "Bars");
 	Tab("common", ICONS.common, "Any class");
 	Tab("lab", "Interface\\Icons\\INV_Misc_Spyglass_02", "Lab");
 	ui.classHead = Label(ui.nav, "Classes", "GameFontNormalSmall", true);
@@ -801,7 +807,7 @@ local function BuildNav()
 		local y = -6;
 		byPage.general:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y);
 		byPage.all:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 30);
-		byPage.hero:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 60);
+		byPage.bars:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 6, y - 60);
 		ui.classHead:SetPoint("TOPLEFT", ui.nav, "TOPLEFT", 12, y - 100);
 		y = y - 116;
 		local classes = ClassOrder();
@@ -2057,13 +2063,41 @@ local function HeroPicks(h)
 	end);
 end
 
+-- The Bars page: the hero bar's settings or the target bar's, one at a time, chosen by a row of two
+-- tabs over each one's own (the user, 2026-11-26: "combine hero and target bars into one Bars tab -
+-- then have hero and target bars as tabs inside with theire repective sub tabs").
+local function BarSwitch(h)
+	local list = { { "hero", "Hero bar", 90 }, { "target", "Target bar", 96 } };
+	local buttons, tx = {}, 12;
+	for i = 1, 2 do
+		local id = list[i][1];
+		local b = Button(h, list[i][2], list[i][3], 22, function()
+			ui.barsTab = id;
+			ShowPage("bars");
+		end);
+		b:SetPoint("TOPLEFT", h, "TOPLEFT", tx, -8);
+		tx = tx + math.max(list[i][3], b:GetWidth() or 0) + 4;
+		buttons[id] = b;
+	end
+	table.insert(h.refreshers, function()
+		for id, b in pairs(buttons) do
+			SetActive(b, id == ( ui.barsTab or "hero" ));
+		end
+	end);
+	-- a line between them and the bar's own tabs
+	local r = Rule(h, 0.15);
+	r:SetPoint("TOPLEFT", h, "TOPLEFT", 12, -35);
+	r:SetPoint("TOPRIGHT", h, "TOPRIGHT", -12, -35);
+end
+
 local function BuildHero()
 	local h = Box(win);
 	ui.hero = h;
 	h:SetPoint("TOPLEFT", win, "TOPLEFT", NAV_W + 18, -TOP);
 	h:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -10, 10);
-	h.rows, h.refreshers, h.live, h.top = {}, {}, {}, -36;
+	h.rows, h.refreshers, h.live, h.top = {}, {}, {}, -72;
 	local B = AST.bar;
+	BarSwitch(h);
 	-- its parts on tabs along its top (the user, 2026-11-25: the page was long); the last one shown
 	-- is kept for the session
 	local SUBS = { { "bar", "Bar", 60 }, { "health", "Health & mana", 116 }, { "shields", "Shields", 72 }, { "icons", "Icons", 60 },
@@ -2076,7 +2110,7 @@ local function BuildHero()
 			h.sub, ui.heroTab, h.offset = id, id, 0;
 			Refresh();
 		end);
-		b:SetPoint("TOPLEFT", h, "TOPLEFT", tx, -8);
+		b:SetPoint("TOPLEFT", h, "TOPLEFT", tx, -42);
 		tx = tx + math.max(SUBS[i][3], b:GetWidth() or 0) + 4;
 		tabs[id] = b;
 	end
@@ -2189,7 +2223,13 @@ local function BuildHero()
 		"The game's player frame.");
 	-- the skill and jewelry icons under your frame: the game draws them itself, so they're its own
 	-- "Show Build" setting (its Interface page has it too), switched here
-	local function HasBuild() return type(AZS_SetHudShown) == "function" and type(AZS_IsHudShown) == "function"; end
+	-- (not while Survivor UI keeps the game's row away itself, for its Build list: its to show then,
+	-- and unticking here would bring the game's row back beside its list)
+	local function SuiBuild()
+		local d = IsAddOnLoaded and IsAddOnLoaded("SurvivorUI") and SurvivorUIDB;
+		return d and ( ( d.buildList ~= false and not d.gameBuildToo ) or d.noGameBuild ) and true or false;
+	end
+	local function HasBuild() return type(AZS_SetHudShown) == "function" and type(AZS_IsHudShown) == "function" and not SuiBuild(); end
 	Check(h, "Hide your skill icons", HasBuild, function() return HasBuild() and not AZS_IsHudShown("build"); end,
 		function(v)
 			-- (kept as ours too, put on again each session: SurvivorUI turns the game's back on as it closes)
@@ -2211,6 +2251,158 @@ local function BuildHero()
 			"Reset", function() B.Reset(); Refresh(); end);
 	end } });
 	Text(h, "/ast bar", nil, function() return L("shows or hides it (lock, unlock, test, reset, shield)"); end);
+	h.subTag = nil;
+	Scrolls(h, -(H - TOP - 10 - 10), 6);
+	Layout(h);
+	table.insert(h.refreshers, function() Layout(h); end);
+end
+
+-- The target bar's page (TargetBar.lua): its parts on tabs along its top, as the hero bar's (the
+-- user, 2026-11-26: "similalrly styled ... with its own customization ... completly customizable").
+local function BuildTarget()
+	local h = Box(win);
+	ui.target = h;
+	h:SetPoint("TOPLEFT", win, "TOPLEFT", NAV_W + 18, -TOP);
+	h:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -10, 10);
+	h.rows, h.refreshers, h.live, h.top = {}, {}, {}, -72;
+	local T = AST.tbar;
+	BarSwitch(h);
+	local SUBS = { { "frame", "Bar", 60 }, { "health", "Health & mana", 116 }, { "text", "Name & numbers", 124 },
+		{ "auras", "Debuffs & buffs", 124 } };
+	h.sub = ui.targetTab or "frame";
+	local tabs, tx = {}, 12;
+	for i = 1, table.getn(SUBS) do
+		local id = SUBS[i][1];
+		local b = Button(h, SUBS[i][2], SUBS[i][3], 22, function()
+			h.sub, ui.targetTab, h.offset = id, id, 0;
+			Refresh();
+		end);
+		b:SetPoint("TOPLEFT", h, "TOPLEFT", tx, -42);
+		tx = tx + math.max(SUBS[i][3], b:GetWidth() or 0) + 4;
+		tabs[id] = b;
+	end
+	table.insert(h.refreshers, function()
+		for id, b in pairs(tabs) do
+			SetActive(b, id == h.sub);
+		end
+	end);
+	local function S() return T.S(); end
+	local function Get(key) return function() return S()[key]; end; end
+	local function Set(key) return function(v) S()[key] = v; end; end
+	local function Is(key, v) return function() return S()[key] == v; end; end
+	local function Yes(key) return function() return S()[key]; end; end
+	local function Times(v) return string.format("%d%%", math.floor(v * 100 + 0.5)); end
+	local function Count(v) return tostring(v); end
+	local function NotNone() return S().text ~= "none"; end
+	local function ByKind() return S().healthColor == "kind"; end
+	local SIDES = { { "above", "Above", 60 }, { "below", "Below", 60 } };
+	local ALIGN = { { "left", "Left", 50 }, { "center", "Middle", 60 }, { "right", "Right", 50 } };
+
+	h.subTag = "frame";
+	Section(h, "Target bar");
+	Check(h, "Show it", nil, Get("on"), Set("on"), "The enemy you target: its health, name, debuffs and buffs.");
+	Check(h, "Locked", nil, Get("locked"), Set("locked"), "Unlock it to drag it; right-click it to lock it again.");
+	Choice(h, "Place", nil, { { "screen", "Where you put it", 120 }, { "bar", "By the hero bar", 120 } }, Get("anchor"), Set("anchor"));
+	Choice(h, "Side", Is("anchor", "bar"), { { "right", "Right", 54 }, { "left", "Left", 50 }, { "above", "Above", 56 },
+		{ "below", "Below", 56 } }, Get("side"), Set("side"));
+	Stepper(h, "Gap", Is("anchor", "bar"), Get("gap"), Set("gap"), 1, 0, 200, Px, true);
+	Text(h, "", function() return S().anchor == "bar" and not ( AST.bar and AST.bar.S() and AST.bar.S().on ); end,
+		function() return L("The hero bar is off: it stays where you put it until the bar is on."); end);
+	Choice(h, "Look", nil, { { "subdued", "Subdued", 80 }, { "sleek", "Sleek", 70 }, { "bold", "Bold", 60 } }, Get("look"),
+		function(v) T.ApplyLook(v); end);
+	Actions(h, "Position", nil, { { "Reset position", function()
+		local d, s = T.Defaults(), S();
+		s.anchor, s.point, s.rel, s.x, s.y = "screen", d.point, d.rel, d.x, d.y;
+	end } });
+	-- the demo (shown even while it's off; your settings stay as they are); again to stop it
+	local try = Row(h, "Try it");
+	local test = Button(try, "Stop test", 80, 18, function() T.Test(); end);
+	test:SetPoint("LEFT", try, "LEFT", CX, 0);
+	table.insert(h.live, function() test.text:SetText(L(T.Testing() and "Stop test" or "Test")); end);
+
+	Section(h, "Size");
+	Stepper(h, "Width", nil, Get("width"), Set("width"), 10, 60, 700, Px, true);
+	Stepper(h, "Height", nil, Get("height"), Set("height"), 1, 3, 60, Px, true);
+	Stepper(h, "Scale", nil, Get("scale"), Set("scale"), 0.05, 0.5, 3, Times);
+	Stepper(h, "Opacity", nil, Get("alpha"), Set("alpha"), 0.05, 0.1, 1, Pct);
+
+	Section(h, "Game frames");
+	Check(h, "Hide enemy frame", nil, function() return AST.bar.S().hideTarget; end,
+		function(v) AST.bar.S().hideTarget = v; AST.bar.Park(); end, "The frame of the enemy you target.");
+
+	Section(h, "Start over");
+	Actions(h, "Target bar", nil, { { "Reset the target bar", function()
+		Confirm(L("Every target bar setting goes back to its default, its place too. This can't be undone."),
+			"Reset", function() T.Reset(); Refresh(); end);
+	end } });
+	Text(h, "/ast target", nil, function() return L("shows or hides it (lock, unlock, test, reset)"); end);
+
+	h.subTag = "health";
+	Section(h, "Health");
+	Choice(h, "Colour", nil, { { "kind", "By kind", 70 }, { "health", "By health", 80 }, { "custom", "Your own", 80 } },
+		Get("healthColor"), Set("healthColor"));
+	Color(h, "Your colour", Is("healthColor", "custom"), "healthRGB", S);
+	Color(h, "Enemies", ByKind, "kindNormal", S);
+	Color(h, "Elites", ByKind, "kindElite", S);
+	Color(h, "Guardians", ByKind, "kindGuardian", S);
+	Color(h, "Bosses", ByKind, "kindBoss", S);
+	Color(h, "Friends", ByKind, "kindFriend", S);
+	Choice(h, "Bar", nil, { { "shaded", "Shaded", 70 }, { "flat", "Flat", 60 } }, Get("texture"), Set("texture"));
+	Stepper(h, "Background", nil, Get("bgAlpha"), Set("bgAlpha"), 0.05, 0, 1, Pct);
+	Check(h, "Border", nil, Get("border"), Set("border"), "A thin dark line round it, in the execute colour while in range.");
+	Check(h, "Gloss", nil, Get("gloss"), Set("gloss"), "Light along its top.");
+	Check(h, "Light sweep", nil, Get("sheen"), Set("sheen"), "A soft light runs across it now and then.");
+	Check(h, "Smooth", nil, Get("smooth"), Set("smooth"), "It slides to new values instead of jumping.");
+	Check(h, "Damage trail", nil, Get("trail"), Set("trail"), "What a hit took lingers a moment, then drains away.");
+
+	Section(h, "Execute range");
+	Stepper(h, "Execute below", nil, Get("execAt"), Set("execAt"), 1, 0, 90, function(v)
+		return v > 0 and string.format("%d%%", v) or L("Off");
+	end);
+	Color(h, "Execute colour", function() return S().execAt > 0; end, "execRGB", S);
+
+	Section(h, "Mana");
+	Check(h, "Show mana", nil, Get("power"), Set("power"), "Or rage, or energy: a thin bar under its health.");
+	Stepper(h, "Mana height", Yes("power"), Get("powerHeight"), Set("powerHeight"), 1, 1, 20, Px);
+
+	h.subTag = "text";
+	Section(h, "Health");
+	Choice(h, "Numbers", nil, { { "none", "None", 50 }, { "percent", "%", 36 }, { "current", "Health", 60 },
+		{ "both", "Health / max", 90 }, { "full", "All", 40 } }, Get("text"), Set("text"));
+	Choice(h, "Numbers at", NotNone, { { "center", "Middle", 60 }, { "left", "Left", 50 }, { "right", "Right", 50 } },
+		Get("textPos"), Set("textPos"));
+	Stepper(h, "Number size", NotNone, Get("textSize"), Set("textSize"), 1, 7, 24, Px);
+	Section(h, "Name");
+	Check(h, "Show name", nil, Get("name"), Set("name"), "Its name, and what it is: an elite, a guardian or a boss.");
+	Choice(h, "Name at", Yes("name"), { { "above", "Above", 60 }, { "inside", "Inside", 60 }, { "below", "Below", 60 } },
+		Get("namePos"), Set("namePos"));
+	Stepper(h, "Name size", Yes("name"), Get("nameSize"), Set("nameSize"), 1, 7, 24, Px);
+	Choice(h, "Name colour", Yes("name"), { { "kind", "By kind", 70 }, { "white", "White", 60 } }, Get("nameColor"), Set("nameColor"));
+	Check(h, "Its kind", Yes("name"), Get("kindTag"), Set("kindTag"), "Elite, Guardian or Boss after its name.");
+	Check(h, "Its target", nil, Get("tot"), Set("tot"), "Whom it's after, at the right of its name.");
+
+	h.subTag = "auras";
+	Section(h, "Debuffs");
+	Check(h, "Show debuffs", nil, Get("debuffs"), Set("debuffs"), "What's on it, yours and your team's.");
+	Stepper(h, "Most debuffs", Yes("debuffs"), Get("debuffsMax"), Set("debuffsMax"), 1, 1, 40, Count);
+	Stepper(h, "Icon size", Yes("debuffs"), Get("debuffSize"), Set("debuffSize"), 1, 8, 64, Px, true);
+	Choice(h, "Side", Yes("debuffs"), SIDES, Get("debuffSide"), Set("debuffSide"));
+	Choice(h, "Line up", Yes("debuffs"), ALIGN, Get("debuffAlign"), Set("debuffAlign"));
+	Section(h, "Buffs");
+	Check(h, "Show buffs", nil, Get("buffs"), Set("buffs"), "What helps it, when it has any.");
+	Stepper(h, "Most buffs", Yes("buffs"), Get("buffsMax"), Set("buffsMax"), 1, 1, 32, Count);
+	Stepper(h, "Icon size", Yes("buffs"), Get("buffSize"), Set("buffSize"), 1, 8, 64, Px, true);
+	Choice(h, "Side", Yes("buffs"), SIDES, Get("buffSide"), Set("buffSide"));
+	Choice(h, "Line up", Yes("buffs"), ALIGN, Get("buffAlign"), Set("buffAlign"));
+	Section(h, "Both");
+	Stepper(h, "Per row", nil, Get("perRow"), Set("perRow"), 1, 1, 40, Count);
+	Stepper(h, "Gap", nil, Get("auraGap"), Set("auraGap"), 1, 0, 20, Px);
+	Check(h, "Stacks", nil, Get("stacks"), Set("stacks"), "How many, on the icon.");
+	Check(h, "Seconds left", nil, Get("timers"), Set("timers"), "Where the game tells it: a guardian's and a boss's.");
+	Check(h, "Time shade", nil, Get("shade"), Set("shade"), "Dark over the time that's gone.");
+	Check(h, "Colour by type", nil, Get("typeColor"), Set("typeColor"),
+		"A debuff's edge by what takes it off: magic, curse, disease, poison.");
+	Check(h, "Tooltips", nil, Get("tips"), Set("tips"), "What it is when you point at it.");
 	h.subTag = nil;
 	Scrolls(h, -(H - TOP - 10 - 10), 6);
 	Layout(h);
@@ -2334,6 +2526,7 @@ local function Build()
 	BuildGeneral();
 	BuildAll();
 	BuildHero();
+	BuildTarget();
 	-- the texts that change on their own, four times a second
 	local acc = 0;
 	win:SetScript("OnUpdate", function()
@@ -2351,11 +2544,11 @@ local function Build()
 			end
 		end
 		local live = ( page == "general" and ui.general.live ) or ( page == "all" and ui.all.live )
-			or ( page == "hero" and ui.hero.live ) or (selected and ui.panel.live) or {};
+			or ( page == "bars" and ( ui.barsTab == "target" and ui.target.live or ui.hero.live ) ) or (selected and ui.panel.live) or {};
 		for i = 1, table.getn(live) do
 			live[i]();
 		end
-		if ( page ~= "general" and page ~= "all" and page ~= "hero" and ui.paint ) then
+		if ( page ~= "general" and page ~= "all" and page ~= "bars" and ui.paint ) then
 			ui.paint();
 		end
 	end);
@@ -2365,13 +2558,27 @@ end
 -- Shows page `p`: General, or a page of telegraphs with the one chosen there last selected.
 ShowPage = function(p)
 	local db, _, myClass = AST.State();
+	-- (the hero bar's and the target bar's pages are one now, Bars: either of the old names opens it
+	-- on that bar)
+	if ( p == "hero" or p == "target" ) then
+		ui.barsTab, p = p, "bars";
+	end
 	page = p;
 	db.ui.page = p;
-	if ( p == "general" or p == "all" or p == "hero" ) then
+	if ( p == "general" or p == "all" or p == "bars" ) then
 		ui.list:Hide();
 		ui.panel:Hide();
 		ui.hero:Hide();
-		if ( p == "hero" ) then
+		ui.target:Hide();
+		if ( p == "bars" and ui.barsTab == "target" ) then
+			ui.general:Hide();
+			ui.all:Hide();
+			ui.target:Show();
+			ui.target.offset = 0;
+			ui.pageIcon:SetTexture(ICONS.target);
+			ui.pageTitle:SetText(L("Target bar"));
+			ui.pageSub:SetText(L("The enemy you target: its health, name, debuffs and buffs on a bar of their own."));
+		elseif ( p == "bars" ) then
 			ui.general:Hide();
 			ui.all:Hide();
 			ui.hero:Show();
@@ -2400,6 +2607,7 @@ ShowPage = function(p)
 		ui.general:Hide();
 		ui.all:Hide();
 		ui.hero:Hide();
+		ui.target:Hide();
 		ui.list:Show();
 		ui.panel:Show();
 		local r = AST.registry[p] or {};
@@ -2436,8 +2644,8 @@ ShowPage = function(p)
 		end
 	end
 	Refresh();
-	local live = ( p == "general" and ui.general.live ) or ( p == "all" and ui.all.live ) or ( p == "hero" and ui.hero.live )
-		or (selected and ui.panel.live) or {};
+	local live = ( p == "general" and ui.general.live ) or ( p == "all" and ui.all.live )
+		or ( p == "bars" and ( ui.barsTab == "target" and ui.target.live or ui.hero.live ) ) or (selected and ui.panel.live) or {};
 	for i = 1, table.getn(live) do
 		live[i]();
 	end
