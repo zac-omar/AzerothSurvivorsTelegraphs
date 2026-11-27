@@ -668,6 +668,7 @@ AST_LOCALE["uk"] = {
 		["Filling within"] = "Заповниться протягом",
 		["Fills as its time runs out"] = "Заповнюється до завершення",
 		["Fills as the cooldown runs"] = "Заповнюється під час перезарядки",
+		["Fills from"] = "Заповнюється від",
 		["First layer"] = "Перший шар",
 		["Flash length"] = "Тривалість спалаху",
 		["Flashes round you when %s goes off."] = "Спалахує довкола вас, коли спрацьовує %s.",

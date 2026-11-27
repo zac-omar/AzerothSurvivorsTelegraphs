@@ -2221,6 +2221,7 @@ local function BuildHero()
 		Get("healthColor"), Set("healthColor"));
 	Color(h, "Your colour", Is("healthColor", "custom"), "healthRGB", S);
 	Choice(h, "Bar", nil, { { "shaded", "Shaded", 70 }, { "flat", "Flat", 60 } }, Get("texture"), Set("texture"));
+	Choice(h, "Fills from", nil, { { "left", "Left", 50 }, { "right", "Right", 50 } }, Get("hpFrom"), Set("hpFrom"));
 	Choice(h, "Numbers", nil, { { "none", "None", 50 }, { "percent", "%", 36 }, { "current", "Health", 60 },
 		{ "both", "Health / max", 90 }, { "full", "All", 40 } }, Get("text"), Set("text"));
 	Check(h, "Shield in the numbers", NotNone, Get("textShield"), Set("textShield"),
@@ -2254,9 +2255,13 @@ local function BuildHero()
 	Check(h, "Show shields", nil, Get("shield"), Set("shield"), "Laid over your health: past 100% another layer goes over the first.");
 	Choice(h, "Shows", Yes("shield"), { { "amount", "How much", 80 }, { "marker", "That you have one", 130 } },
 		Get("shieldStyle"), Set("shieldStyle"));
+	Choice(h, "Fills from", function() return S().shield and S().shieldStyle ~= "marker"; end,
+		{ { "left", "Left", 50 }, { "right", "Right", 50 } }, Get("shieldFrom"), Set("shieldFrom"));
 	Stepper(h, "Mark size", function() return S().shield and S().shieldStyle == "marker"; end, Get("shieldMark"), Set("shieldMark"),
 		5, 5, 100, function(v) return string.format(L("%d%% of the bar"), v); end);
 	Choice(h, "Shield look", Yes("shield"), { { "energy", "Energy", 70 }, { "flat", "Flat", 60 } }, Get("shieldLook"), Set("shieldLook"));
+	Check(h, "Light sweep", function() return S().shield and S().shieldLook == "energy"; end, Get("shieldSheen"), Set("shieldSheen"),
+		"A soft light runs across it now and then.");
 	Color(h, "First layer", Yes("shield"), "shield1", S);
 	Color(h, "Second layer", function() return S().shield and S().shieldStyle ~= "marker"; end, "shield2", S);
 	Color(h, "Third layer", function() return S().shield and S().shieldStyle ~= "marker"; end, "shield3", S);

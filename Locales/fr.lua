@@ -649,6 +649,7 @@ AST_LOCALE["fr"] = {
 		["Filling within"] = "Se remplissant d'ici",
 		["Fills as its time runs out"] = "Se remplit jusqu'à expiration",
 		["Fills as the cooldown runs"] = "Se remplit pendant la recharge",
+		["Fills from"] = "Se remplit depuis",
 		["First layer"] = "Première couche",
 		["Flash length"] = "Durée du clignotement",
 		["Flashes round you when %s goes off."] = "Clignote autour de vous quand %s se déclenche.",

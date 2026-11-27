@@ -667,6 +667,7 @@ AST_LOCALE["ja"] = {
 		["Filling within"] = "埋まるまでの時間",
 		["Fills as its time runs out"] = "時間切れに向けて満ちる",
 		["Fills as the cooldown runs"] = "クールダウンに合わせて満ちる",
+		["Fills from"] = "満ちる側",
 		["First layer"] = "第1層",
 		["Flash length"] = "点滅時間",
 		["Flashes round you when %s goes off."] = "%sが発動すると周囲に光ります。",

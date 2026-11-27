@@ -663,6 +663,7 @@ AST_LOCALE["ro"] = {
 		["Filling within"] = "Se umple în cel mult",
 		["Fills as its time runs out"] = "Se umple până expiră",
 		["Fills as the cooldown runs"] = "Se umple în timpul reîncărcării",
+		["Fills from"] = "Se umple de la",
 		["First layer"] = "Primul strat",
 		["Flash length"] = "Durata aprinderii",
 		["Flashes round you when %s goes off."] = "Clipește în jurul tău când se declanșează %s.",

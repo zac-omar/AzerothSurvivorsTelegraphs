@@ -60,6 +60,14 @@ local DEF = {
 	-- "amount": layers as long as the shield holds; "marker": the bar's right end (shieldMark %)
 	-- covered while you have any shield, the same however much it holds
 	shieldStyle = "amount", shieldMark = 25,
+	-- "amount"'s end: "left" (it fills from the bar's left end and wears away from its right) or
+	-- "right" (the other way round) (the user, 2026-11-27)
+	shieldFrom = "left",
+	-- your health the same way: "left" (fills from the bar's left end, drains from its right) or "right"
+	-- (the user, 2026-11-27: "add a toggle to do the same with hp")
+	hpFrom = "left",
+	-- the light running along the shield in the Energy look (the user, 2026-11-27: a switch like health's)
+	shieldSheen = true,
 	shield1 = { 0.35, 0.75, 1 }, shield2 = { 1, 0.78, 0.25 }, shield3 = { 0.85, 0.45, 1 },
 	skills = true, jewelry = true, buffs = false, buffsMax = 8,
 	-- a skill's icon only while it's on cooldown (the user, 2026-11-26)
@@ -677,15 +685,23 @@ local function Shields(s, frac, W, y, h, now, a)
 		local part = math.max(0, math.min(1, frac - (k - 1)));
 		parts[k] = part;
 	end
+	-- from the bar's right end instead (shieldFrom "right"): the same, mirrored
+	local right = s.shieldFrom == "right";
+	local function X(x, w)
+		if ( right ) then
+			return W - x - w;
+		end
+		return x;
+	end
 	local top, topC = 0, nil;
 	for k = 1, 3 do
 		local c = colors[k];
 		local x0, x1 = W * (parts[k + 1] or 0), W * parts[k];
 		local body = s.shieldAlpha * ( energy and ( 0.34 + 0.1 * (k - 1) ) or ( 0.55 + 0.08 * (k - 1) ) ) * breath + hit * 0.3;
-		Put(P["shield" .. k], x0, y, x1 - x0, h, c[1], c[2], c[3], a * body);
+		Put(P["shield" .. k], X(x0, x1 - x0), y, x1 - x0, h, c[1], c[2], c[3], a * body);
 		if ( energy ) then
 			local lh = math.max(1, h * 0.14);
-			Put(P["shieldTop" .. k], x0, y + h - lh, x1 - x0, lh, c[1], c[2], c[3], a * math.min(1, s.shieldAlpha + 0.25));
+			Put(P["shieldTop" .. k], X(x0, x1 - x0), y + h - lh, x1 - x0, lh, c[1], c[2], c[3], a * math.min(1, s.shieldAlpha + 0.25));
 		else
 			Off(P["shieldTop" .. k]);
 		end
@@ -696,10 +712,14 @@ local function Shields(s, frac, W, y, h, now, a)
 	if ( energy and top > 0 ) then
 		-- its front (where it's wearing away): a bright edge with a glow; a light running along it
 		local lc = { 0.6 + 0.4 * topC[1], 0.6 + 0.4 * topC[2], 0.6 + 0.4 * topC[3] };
-		Put(P.front, top - 2, y, 2, h, lc[1], lc[2], lc[3], a * (0.9 + 0.1 * hit));
+		Put(P.front, X(top - 2, 2), y, 2, h, lc[1], lc[2], lc[3], a * (0.9 + 0.1 * hit));
 		Coords(P.frontGlow, 0, 1, 0, 1);
-		Put(P.frontGlow, top - h * 0.9, y - h * 0.4, h * 1.8, h * 1.8, topC[1], topC[2], topC[3], a * 0.45 * breath);
-		Sweep(P.shieldSheen, 0, W * parts[1], y, h, lc, a * 0.5, now, 2.2, (W * parts[1] + 60) / 0.9);
+		Put(P.frontGlow, X(top - h * 0.9, h * 1.8), y - h * 0.4, h * 1.8, h * 1.8, topC[1], topC[2], topC[3], a * 0.45 * breath);
+		if ( s.shieldSheen ) then
+			Sweep(P.shieldSheen, X(0, W * parts[1]), X(0, W * parts[1]) + W * parts[1], y, h, lc, a * 0.5, now, 2.2, (W * parts[1] + 60) / 0.9);
+		else
+			Off(P.shieldSheen);
+		end
 	else
 		Off(P.front);
 		Off(P.frontGlow);
@@ -734,7 +754,7 @@ local function Marker(s, W, y, h, now, a)
 	local lc = { 0.6 + 0.4 * c[1], 0.6 + 0.4 * c[2], 0.6 + 0.4 * c[3] };
 	Put(P.front, x0, y, 2, h, lc[1], lc[2], lc[3], a * (0.9 + 0.1 * hit));
 	Off(P.frontGlow);
-	if ( energy ) then
+	if ( energy and s.shieldSheen ) then
 		Sweep(P.shieldSheen, x0, W, y, h, lc, a * 0.5, now, 2.2, (mw + 60) / 0.9);
 	else
 		Off(P.shieldSheen);
@@ -884,17 +904,25 @@ function B.Paint(now, dt)
 	-- health, what's draining, the gloss, the low-health pulse, the sweep of light
 	local r, g, b = HealthColor(s, frac);
 	local fw = W * B.hp;
+	-- where the health starts: the bar's left end, or its right (hpFrom "right": all of it mirrored)
+	local hr = s.hpFrom == "right";
+	local fx = hr and ( W - fw ) or 0;
 	if ( s.trail and B.trail > B.hp + 0.002 ) then
-		Put(P.trail, fw, y0, W * (B.trail - B.hp), H, 1, 0.62, 0.4, a * 0.7);
+		local tw = W * (B.trail - B.hp);
+		Put(P.trail, hr and ( fx - tw ) or fw, y0, tw, H, 1, 0.62, 0.4, a * 0.7);
 	else
 		Off(P.trail);
 	end
-	Coords(P.fill, 0, math.max(0.01, B.hp), 0, 1);
-	Put(P.fill, 0, y0, fw, H, r, g, b, a);
+	if ( hr ) then
+		Coords(P.fill, 1 - math.max(0.01, B.hp), 1, 0, 1);
+	else
+		Coords(P.fill, 0, math.max(0.01, B.hp), 0, 1);
+	end
+	Put(P.fill, fx, y0, fw, H, r, g, b, a);
 	if ( s.gloss and P.gloss.SetGradientAlpha and fw > 1 ) then
 		-- light at its top fading down (a gradient: its colour isn't set the usual way, which would undo it)
 		local gl = P.gloss;
-		Put(gl, 0, y0 + H * 0.45, fw, H * 0.55, 1, 1, 1, 1);
+		Put(gl, fx, y0 + H * 0.45, fw, H * 0.55, 1, 1, 1, 1);
 		if ( gl.ga ~= a ) then
 			gl:SetGradientAlpha("VERTICAL", 1, 1, 1, 0, 1, 1, 1, 0.22 * a);
 			gl.ga = a;
@@ -903,12 +931,12 @@ function B.Paint(now, dt)
 		Off(P.gloss);
 	end
 	if ( s.lowAt > 0 and frac < s.lowAt / 100 ) then
-		Put(P.low, 0, y0, fw, H, 1, 0.1, 0.05, a * 0.3 * (0.5 + 0.5 * math.sin(now * 7)));
+		Put(P.low, fx, y0, fw, H, 1, 0.1, 0.05, a * 0.3 * (0.5 + 0.5 * math.sin(now * 7)));
 	else
 		Off(P.low);
 	end
 	if ( s.sheen and fw > 4 ) then
-		Sweep(P.sheen, 0, fw, y0, H, WHITE, a * 0.28, now, 3.5, (W + 80) / 1.2);
+		Sweep(P.sheen, fx, fx + fw, y0, H, WHITE, a * 0.28, now, 3.5, (W + 80) / 1.2);
 	else
 		Off(P.sheen);
 	end

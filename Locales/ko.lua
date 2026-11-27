@@ -666,6 +666,7 @@ AST_LOCALE["ko"] = {
 		["Filling within"] = "채워지기까지",
 		["Fills as its time runs out"] = "시간이 다할 때까지 차오름",
 		["Fills as the cooldown runs"] = "재사용 대기시간 동안 차오름",
+		["Fills from"] = "채워지는 쪽",
 		["First layer"] = "첫 번째 층",
 		["Flash length"] = "번쩍임 길이",
 		["Flashes round you when %s goes off."] = "%s 발동 시 주위에 번쩍입니다.",

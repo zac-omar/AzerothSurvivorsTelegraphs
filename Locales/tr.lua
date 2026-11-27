@@ -408,6 +408,7 @@ AST_LOCALE["tr"] = {
 		["Filling within"] = "Dolmasına en çok",
 		["Fills as its time runs out"] = "Süresi bitene kadar dolar",
 		["Fills as the cooldown runs"] = "Bekleme süresince dolar",
+		["Fills from"] = "Dolma yönü",
 		["First layer"] = "Birinci katman",
 		["Flash length"] = "Yanıp sönme süresi",
 		["Flashes round you when %s goes off."] = "%s devreye girince çevrende parlar.",

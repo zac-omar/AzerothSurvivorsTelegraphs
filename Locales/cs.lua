@@ -663,6 +663,7 @@ AST_LOCALE["cs"] = {
 		["Filling within"] = "Zaplní se do",
 		["Fills as its time runs out"] = "Plní se, jak dochází čas",
 		["Fills as the cooldown runs"] = "Plní se, jak běží obnovení",
+		["Fills from"] = "Plní se od",
 		["First layer"] = "První vrstva",
 		["Flash length"] = "Délka záblesku",
 		["Flashes round you when %s goes off."] = "Blikne kolem tebe, když se spustí %s.",

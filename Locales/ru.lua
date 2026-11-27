@@ -667,6 +667,7 @@ AST_LOCALE["ru"] = {
 		["Filling within"] = "Заполнится в течение",
 		["Fills as its time runs out"] = "Заполняется до окончания",
 		["Fills as the cooldown runs"] = "Заполняется по ходу перезарядки",
+		["Fills from"] = "Заполняется от",
 		["First layer"] = "Первый слой",
 		["Flash length"] = "Длительность вспышки",
 		["Flashes round you when %s goes off."] = "Вспыхивает вокруг вас, когда срабатывает %s.",

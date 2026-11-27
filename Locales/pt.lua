@@ -659,6 +659,7 @@ AST_LOCALE["pt"] = {
 		["Filling within"] = "Enchendo em até",
 		["Fills as its time runs out"] = "Preenche até o tempo acabar",
 		["Fills as the cooldown runs"] = "Preenche durante a recarga",
+		["Fills from"] = "Preenche a partir de",
 		["First layer"] = "Primeira camada",
 		["Flash length"] = "Duração do pisca",
 		["Flashes round you when %s goes off."] = "Pisca ao seu redor quando %s é ativado.",

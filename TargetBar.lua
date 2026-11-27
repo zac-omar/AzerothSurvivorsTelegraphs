@@ -623,12 +623,26 @@ local function LevelAt(s)
 	return at;
 end
 
--- How wide a text is at a size (0 where the client can't say).
+-- How wide a text is at a size (0 where the client can't say), kept by its face too: Survivor UI's
+-- font option re-faces every text, ours included, in the middle of a session.
 local function Wide(text, size)
 	local m = P.meas;
+	local key = tostring(m.GetFont and m:GetFont()) .. "\1" .. size .. "\1" .. text;
+	local w = T.wide and T.wide[key];
+	if ( w ) then
+		return w;
+	end
 	Font(m, size);
 	m:SetText(text);
-	return ( m.GetStringWidth and m:GetStringWidth() ) or 0;
+	w = ( m.GetStringWidth and m:GetStringWidth() ) or 0;
+	if ( w > 0 ) then
+		if ( not T.wide or T.wideCount > 64 ) then
+			T.wide, T.wideCount = {}, 0;
+		end
+		T.wide[key] = w;
+		T.wideCount = T.wideCount + 1;
+	end
+	return w;
 end
 
 -- Its name line, all on one line within `room` px (the user's players, 2026-11-26: a long name went
@@ -643,7 +657,8 @@ local function NameLine(s, d, room, withWord)
 	local lc = Hex(s.levelRGB);
 	local word = withWord and s.kindTag and KindWord(d.kind);
 	local wc = Hex(KindColor(s, d.kind), 0.1);
-	local key = table.concat({ d.name or "", tostring(lv), at, tostring(word), hc, lc, wc, tostring(room), s.nameSize }, "|");
+	local key = table.concat({ d.name or "", tostring(lv), at, tostring(word), hc, lc, wc, tostring(room), s.nameSize,
+		tostring(P.meas.GetFont and P.meas:GetFont()) }, "|");
 	local kept = T.names and T.names[key];
 	if ( kept ) then
 		return kept[1], kept[2];
@@ -902,10 +917,7 @@ function T.Paint(d, now, dt)
 	if ( tot ) then
 		Font(P.tot, 10);
 		Say(P.tot, tot);
-		if ( T.totSaid ~= tot ) then
-			T.totSaid, T.totTW = tot, Wide(tot, 10);
-		end
-		totTW = T.totTW;
+		totTW = Wide(tot, 10);
 		totW = totTW + 10 + ( icon and 16 or 0 );
 	end
 	local word = s.name and s.kindTag and KindWord(d.kind);

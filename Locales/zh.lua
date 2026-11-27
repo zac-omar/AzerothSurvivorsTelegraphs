@@ -667,6 +667,7 @@ AST_LOCALE["zh"] = {
 		["Filling within"] = "多久内重新占据",
 		["Fills as its time runs out"] = "随持续时间流逝填充",
 		["Fills as the cooldown runs"] = "随冷却进度填充",
+		["Fills from"] = "填充起点",
 		["First layer"] = "第一层",
 		["Flash length"] = "闪烁时长",
 		["Flashes round you when %s goes off."] = "%s生效时在你周围闪现。",

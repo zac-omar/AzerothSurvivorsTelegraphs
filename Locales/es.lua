@@ -663,6 +663,7 @@ AST_LOCALE["es"] = {
 		["Filling within"] = "Llenándose en menos de",
 		["Fills as its time runs out"] = "Se llena hasta que se agota",
 		["Fills as the cooldown runs"] = "Se llena con la reutilización",
+		["Fills from"] = "Se llena desde",
 		["First layer"] = "Primera capa",
 		["Flash length"] = "Duración del destello",
 		["Flashes round you when %s goes off."] = "Destella a tu alrededor cuando se activa %s.",
